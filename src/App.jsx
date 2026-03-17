@@ -527,7 +527,7 @@ function ViewPicks({allPicks,users,games,allResults}){
 }
 
 // ─── Standings ───────────────────────────────────────────────────────────────
-function Standings({allPicks,allResults,users}){
+function Standings({allPicks,allResults,users,games}){
   const players=Object.entries(users).filter(([u])=>u!==COMMISSIONER_USER);
   const st=players.map(([un,ud])=>{let w=0,l=0,p=0,rS=0,rW=0;const up=allPicks[un]||{};
     ROUNDS.forEach(r=>{const rp=up[r.id]||{};const rr=allResults[r.id]||{};if(Object.keys(rr).length>0)rW++;if(Object.keys(rp).length===r.requiredPicks)rS++;
@@ -542,6 +542,35 @@ function Standings({allPicks,allResults,users}){
     {place:"3RD",amt:25,desc:"Money back (flat)",rank:"bronze"},
     {place:"LAST",amt:remaining>0?Math.round(remaining*0.20):0,desc:"Toilet bowl",rank:"last"},
   ];
+  // Find the toilet bowl leader — last place among fully eligible players only
+  const eligiblePlayers=st.filter(s=>s.full);
+  const toiletBowlUser=eligiblePlayers.length>1?eligiblePlayers[eligiblePlayers.length-1].un:null;
+
+  // Find current active round(s) for "games left" — rounds that are locked but not fully graded
+  const activeRounds=ROUNDS.filter(r=>{
+    if(!isLocked(r.id))return false;
+    const rr=allResults[r.id]||{};
+    const roundGames=(games||[]).filter(g=>g.roundId===r.id);
+    if(roundGames.length===0)return false;
+    // Round is active if any game is ungraded
+    return roundGames.some(g=>!rr[g.id]||(!rr[g.id].team1&&!rr[g.id].over));
+  });
+
+  // Count pending picks per player for active rounds
+  function getPending(un){
+    let pending=0;
+    const up=allPicks[un]||{};
+    activeRounds.forEach(r=>{
+      const rp=up[r.id]||{};
+      const rr=allResults[r.id]||{};
+      Object.entries(rp).forEach(([gid,pick])=>{
+        const res=rr[gid];
+        if(!res||!res[pick])pending++;
+      });
+    });
+    return pending;
+  }
+
   return(<div className="an"><div className="st">STANDINGS</div>
     <div className="crd" style={{marginBottom:18}}>
       <div className="crd-t">PRIZE POOL <span className="bdg bdg-navy">{n} PLAYERS / ${pot}</span></div>
@@ -559,18 +588,20 @@ function Standings({allPicks,allResults,users}){
       </div>
     </div>
     <div className="crd"><div className="crd-t">LEADERBOARD</div>
-      <div className="lr lh"><div>#</div><div>PLAYER</div><div style={{textAlign:"right"}}>PTS</div><div style={{textAlign:"right"}}>W-L-P</div><div style={{textAlign:"center"}}>RDS</div></div>
+      <div className="lr lh"><div>#</div><div>PLAYER</div><div style={{textAlign:"right"}}>PTS</div><div style={{textAlign:"right"}}>W-L-P</div><div style={{textAlign:"center"}}>LIVE</div></div>
       {st.length===0?<div className="ey"><p>No players registered yet.</p></div>:st.map((s,i)=>{
-        const isFirst=i===0&&n>1,isLast=i===n-1&&n>2;
-        return <div key={s.un} className={cn("lr",isFirst&&"top1",isLast&&"topL")}>
-          <div className={cn("lrk",isFirst&&"p1",isLast&&"pL")}>{i+1}</div>
-          <div className="lnm">{getUserDisplay(s.ud)}</div>
+        const isFirst=i===0&&n>1;
+        const isToilet=s.un===toiletBowlUser;
+        const pending=getPending(s.un);
+        return <div key={s.un} className={cn("lr",isFirst&&"top1",isToilet&&"topL")}>
+          <div className={cn("lrk",isFirst&&"p1",isToilet&&"pL")}>{i+1}</div>
+          <div className="lnm">{getUserDisplay(s.ud)}{!s.full&&s.rW>0?<span style={{fontFamily:"var(--fm)",fontSize:8,color:"var(--red)",marginLeft:4}}>INELIGIBLE</span>:""}</div>
           <div className="lpt">{s.pts}</div><div className="lrc">{s.w}-{s.l}-{s.p}</div>
-          <div className="lst" style={{fontFamily:"var(--fm)",fontSize:9,color:s.full?"var(--g)":s.rS>0?"var(--ylw)":"var(--red)"}}>{s.rS}/{s.rW}</div>
+          <div className="lst" style={{fontFamily:"var(--fm)",fontSize:10,color:pending>0?"var(--navy)":"var(--t5)",fontWeight:pending>0?700:400}}>{pending>0?pending:"—"}</div>
         </div>})}
     </div>
     <div style={{marginTop:8,fontSize:9,color:"var(--t5)",fontFamily:"var(--fm)",textAlign:"center",lineHeight:1.8}}>
-      RDS = Rounds submitted / Rounds with games &middot; Tiebreaker: most wins
+      LIVE = Picks pending results &middot; Tiebreaker: most wins &middot; INELIGIBLE = missed a round (no last place payout)
     </div>
   </div>);
 }
@@ -835,7 +866,7 @@ export default function App(){
     <nav className="nav">{tabs.map(t=><button key={t.id} className={cn("nt",activeTab===t.id&&"on")} onClick={()=>setTab(t.id)}>{t.label}</button>)}</nav>
     <div className="main">{!loaded?<div className="ey ld">Loading pool data...</div>:<>
       {activeTab==="picks"&&!isCom&&<MakePicks user={user} games={games} userPicks={userPicks} setUserPicks={p=>{setUserPicks(p);setAllPicks({...allPicks,[user]:p})}} showToast={showToast}/>}
-      {activeTab==="standings"&&<Standings allPicks={allPicks} allResults={allResults} users={users}/>}
+      {activeTab==="standings"&&<Standings allPicks={allPicks} allResults={allResults} users={users} games={games}/>}
       {activeTab==="board"&&<ViewPicks allPicks={allPicks} users={users} games={games} allResults={allResults}/>}
       {activeTab==="history"&&!isCom&&<History user={user} games={games} userPicks={userPicks} allResults={allResults}/>}
       {activeTab==="talk"&&<TrashTalk user={user} userData={userData}/>}
