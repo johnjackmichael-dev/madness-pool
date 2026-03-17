@@ -45,7 +45,7 @@ const ESPN_IDS = {
   "michigan state":127,"missouri":142,"nc state":152,"nebraska":158,
   "north carolina":153,"north dakota state":2449,"northern iowa":2460,
   "ohio state":194,"penn":219,"prairie view a&m":2504,"purdue":2509,
-  "queens":2511,"smu":2567,"saint louis":139,"saint mary's":2565,
+  "queens":2511,"smu":2567,"saint louis":139,"saint mary's":2608,
   "santa clara":2541,"siena":2561,"south florida":58,"st. john's":2599,
   "tcu":2628,"tennessee":2633,"tennessee state":2634,"texas":251,
   "texas a&m":245,"texas tech":2641,"troy":2653,"ucf":2116,"ucla":26,
