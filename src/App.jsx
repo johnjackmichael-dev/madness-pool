@@ -349,7 +349,13 @@ function Auth({onLogin}){
         await S.setShared("pool:users",users);saveSession(uname,users[uname]);onLogin(uname,users[uname]);sBusy(false);return;
       }
       if(!users[uname]){sErr("User not found.");sBusy(false);return}
-      if(users[uname].password!==simpleHash(password)){sErr("Wrong password.");sBusy(false);return}
+      // Support both hashed and plaintext passwords (backwards compatible)
+      const stored=users[uname].password;
+      const hashed=simpleHash(password);
+      const match=stored===hashed||stored===password;
+      if(!match){sErr("Wrong password.");sBusy(false);return}
+      // Auto-migrate plaintext passwords to hashed
+      if(stored===password&&stored!==hashed){users[uname].password=hashed;await S.setShared("pool:users",users)}
       saveSession(uname,users[uname]);onLogin(uname,users[uname]);
     }sBusy(false);
   };
