@@ -57,8 +57,23 @@ function orderTeams(game){
 }
 
 const S={
-  async getShared(k){try{const r=await window.storage.get(k,true);return r?JSON.parse(r.value):null}catch{return null}},
-  async setShared(k,v){try{await window.storage.set(k,JSON.stringify(v),true)}catch(e){console.error(e)}},
+  async getShared(k){
+    try{
+      const r=await fetch(`/api/storage?key=${encodeURIComponent(k)}`);
+      if(!r.ok) return null;
+      const d=await r.json();
+      return d.value||null;
+    }catch{return null}
+  },
+  async setShared(k,v){
+    try{
+      await fetch('/api/storage',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({key:k,value:v})
+      });
+    }catch(e){console.error(e)}
+  },
 };
 
 function isLocked(rid){const r=ROUNDS.find(x=>x.id===rid);return r?new Date()>=new Date(r.lockDate):false}
@@ -839,10 +854,17 @@ export default function App(){
   const handleLogout=()=>{clearSession();setUser(null);setUserData(null);setTab("picks");setLoaded(false)};
 
   const loadData=useCallback(async()=>{
-    const[g,r,u]=await Promise.all([S.getShared("pool:games"),S.getShared("pool:results"),S.getShared("pool:users")]);
-    setGames(g||[]);setAllResults(r||{});setUsers(u||{});
-    if(u){const pe={};for(const un of Object.keys(u)){if(un===COMMISSIONER_USER)continue;const p=await S.getShared(`picks:${un}`);if(p)pe[un]=p}
-    setAllPicks(pe);if(user&&pe[user])setUserPicks(pe[user])}setLoaded(true);
+    try{
+      const[g,r,u]=await Promise.all([S.getShared("pool:games"),S.getShared("pool:results"),S.getShared("pool:users")]);
+      setGames(g||[]);setAllResults(r||{});setUsers(u||{});
+      if(u){
+        const playerNames=Object.keys(u).filter(un=>un!==COMMISSIONER_USER);
+        const pickResults=await Promise.all(playerNames.map(un=>S.getShared(`picks:${un}`)));
+        const pe={};playerNames.forEach((un,i)=>{if(pickResults[i])pe[un]=pickResults[i]});
+        setAllPicks(pe);if(user&&pe[user])setUserPicks(pe[user]);
+      }
+      setLoaded(true);
+    }catch(e){console.error("Load error:",e);setLoaded(true)}
   },[user]);
 
   useEffect(()=>{if(user)loadData()},[user,loadData]);
