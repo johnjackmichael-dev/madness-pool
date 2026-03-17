@@ -14,15 +14,7 @@ const ROUNDS = [
 ];
 const TOTAL_PICKS = ROUNDS.reduce((s, r) => s + r.requiredPicks, 0); // 43
 const COMMISSIONER_USER = "commissioner";
-const PAYOUT_INFO = {
-  buyIn: 25,
-  payouts: [
-    { place: "1ST", pct: 50, desc: "Pool champion", rank: "gold" },
-    { place: "2ND", pct: 25, desc: "Runner up", rank: "silver" },
-    { place: "3RD", pct: 5, desc: "Money back", rank: "bronze" },
-    { place: "LAST", pct: 20, desc: "Toilet bowl", rank: "last" },
-  ],
-};
+const PAYOUT_INFO = { buyIn: 25 };
 const TEAMS = [
   "Alabama","Akron","Arizona","Arkansas","BYU","Cal Baptist","Clemson","Duke",
   "Florida","Furman","Georgia","Gonzaga","Hawai'i","High Point","Hofstra","Houston",
@@ -65,22 +57,8 @@ function orderTeams(game){
 }
 
 const S={
-  async getShared(k){
-    try{
-      const r=await fetch(`/api/storage?key=${encodeURIComponent(k)}`);
-      const d=await r.json();
-      return d.value||null;
-    }catch{return null}
-  },
-  async setShared(k,v){
-    try{
-      await fetch('/api/storage',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({key:k,value:v})
-      });
-    }catch(e){console.error(e)}
-  },
+  async getShared(k){try{const r=await window.storage.get(k,true);return r?JSON.parse(r.value):null}catch{return null}},
+  async setShared(k,v){try{await window.storage.set(k,JSON.stringify(v),true)}catch(e){console.error(e)}},
 };
 
 function isLocked(rid){const r=ROUNDS.find(x=>x.id===rid);return r?new Date()>=new Date(r.lockDate):false}
@@ -396,7 +374,7 @@ function Auth({onLogin}){
         <strong>Points:</strong> 1 point per win, 0.5 for a push, 0 for a loss. Most points at the end wins the pot.<br/><br/>
         <strong>Last place pays out</strong> — but only if you submit 100% of your picks. Miss a round? You're ineligible for the toilet bowl.<br/><br/>
         <strong>Picks lock</strong> at set times each round. Once locked, no changes. The countdown is always visible at the top of every page.<br/><br/>
-        <strong>Buy-in:</strong> $25 &middot; <strong>1st:</strong> 50% &middot; <strong>2nd:</strong> 25% &middot; <strong>3rd:</strong> 5% &middot; <strong>Last:</strong> 20%
+        <strong>Buy-in:</strong> $25 &middot; <strong>3rd:</strong> $25 flat &middot; <strong>Remaining pot:</strong> 1st 55% / 2nd 25% / Last 20%
       </div>
     </div></div>
   );
@@ -557,19 +535,28 @@ function Standings({allPicks,allResults,users}){
     return{un,ud,pts:w+p*.5,w,l,p,rS,rW,full:rW>0&&rS>=rW};
   }).sort((a,b)=>b.pts-a.pts||b.w-a.w);
   const n=st.length,pot=n*PAYOUT_INFO.buyIn;
+  const remaining=pot-25;
+  const payouts=[
+    {place:"1ST",amt:remaining>0?Math.round(remaining*0.55):0,desc:"Pool champion",rank:"gold"},
+    {place:"2ND",amt:remaining>0?Math.round(remaining*0.25):0,desc:"Runner up",rank:"silver"},
+    {place:"3RD",amt:25,desc:"Money back (flat)",rank:"bronze"},
+    {place:"LAST",amt:remaining>0?Math.round(remaining*0.20):0,desc:"Toilet bowl",rank:"last"},
+  ];
   return(<div className="an"><div className="st">STANDINGS</div>
     <div className="crd" style={{marginBottom:18}}>
       <div className="crd-t">PRIZE POOL <span className="bdg bdg-navy">{n} PLAYERS / ${pot}</span></div>
       <div className="pay-grid">
-        {PAYOUT_INFO.payouts.map((p,i)=><div key={i} className={cn("pay-card",p.rank)}>
+        {payouts.map((p,i)=> <div key={i} className={cn("pay-card",p.rank)}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
             <div className="pay-place">{p.place}</div>
-            <div className="pay-amt">{pot>0?`$${Math.round(pot*p.pct/100)}`:`${p.pct}%`}</div>
+            <div className="pay-amt">${p.amt}</div>
           </div>
           <div className="pay-desc">{p.desc}</div>
         </div>)}
       </div>
-      <div style={{marginTop:12,fontSize:9,color:"var(--t5)",fontFamily:"var(--fm)",letterSpacing:"1px",textAlign:"center"}}>MUST SUBMIT 100% OF PICKS FOR LAST PLACE ELIGIBILITY</div>
+      <div style={{marginTop:12,fontSize:9,color:"var(--t5)",fontFamily:"var(--fm)",letterSpacing:"1px",textAlign:"center"}}>
+        3RD IS FLAT $25 &middot; REMAINING ${remaining>0?remaining:0} SPLITS 55/25/20 &middot; MUST SUBMIT 100% OF PICKS FOR LAST PLACE
+      </div>
     </div>
     <div className="crd"><div className="crd-t">LEADERBOARD</div>
       <div className="lr lh"><div>#</div><div>PLAYER</div><div style={{textAlign:"right"}}>PTS</div><div style={{textAlign:"right"}}>W-L-P</div><div style={{textAlign:"center"}}>RDS</div></div>
