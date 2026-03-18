@@ -438,8 +438,8 @@ function Auth({onLogin}){
   };
   return(
     <div className="lw"><div className="lc an">
-      <div className="lb">MADNESS <em>POOL</em></div>
-      <div className="ls">Are you sharp? Or just a square?</div>
+      <div className="lb">SHARP <em>OR SQUARE</em></div>
+      <div className="ls">March Madness ATS Pick'em</div>
       <div className="ldiv"/>
       {err&&<div className="lerr">{err}</div>}
       {mode==="register"&&<div className="ng" style={{marginBottom:14}}>
@@ -1196,7 +1196,7 @@ export default function App(){
   const activeTab=tabs.find(t=>t.id===tab)?tab:tabs[0].id;
 
   return <><style>{css}</style><div className="shell">
-    <header className="hdr"><div className="brand">MADNESS <em>POOL</em><small>Against The Spread &middot; March 2026</small></div>
+    <header className="hdr"><div className="brand">SHARP <em>OR SQUARE</em><small>Against The Spread &middot; March 2026</small></div>
       <div className="hdr-r"><div className="hdr-u">{userData?getUserDisplay(userData):user}</div>
       <button className="btn-out" onClick={handleLogout}>OUT</button></div>
     </header>
