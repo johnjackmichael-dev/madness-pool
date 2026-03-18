@@ -604,8 +604,7 @@ function MakePicks({user,games,userPicks,setUserPicks,showToast}){
       const awaySeed=s1>s2?g.seed1:g.seed2, homeSeed=s1>s2?g.seed2:g.seed1;
       const displaySpread=g.spread||"PK";
       const gameCd=g.tipTime?countdownTo(g.tipTime):null;
-      return (
-      <div key={g.id} className={cn("gm",hasPick&&"sel",tipped&&"lk")}>
+      return (<div key={g.id} className={cn("gm",hasPick&&"sel",tipped&&"lk")}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
           <div style={{fontFamily:"var(--fm)",fontSize:10,color:tipped?"var(--red)":"var(--t4)"}}>
             {g.tipTime?fmtTime(g.tipTime):"Tip time TBD"}
@@ -629,15 +628,14 @@ function MakePicks({user,games,userPicks,setUserPicks,showToast}){
           <button className={cn("pk",ou==="under"&&"on")} onClick={()=>toggleOu(g.id,g,"under")} disabled={tipped||(!canPickOu&&ou!=="under")}>Under {g.total||""}</button>
         </div>
         {atMax&&!ats&&!ou&&!tipped&&<div className="pk-full">All {round.requiredPicks} picks used — deselect one to pick this game</div>}
-      </div>})}
+      </div>);})}
       </>}
       {tippedGames.length>0&&<>
         <div style={{fontFamily:"var(--fm)",fontSize:10,fontWeight:700,letterSpacing:1.5,color:"var(--t4)",textTransform:"uppercase",margin:"20px 0 8px",padding:"6px 0",borderBottom:"1px solid var(--bdr)"}}>LOCKED — GAME{tippedGames.length>1?"S":""} TIPPED OFF ({tippedGames.length})</div>
         {tippedGames.map(g=>{
       const ats=getAts(picks,g.id), ou=getOu(picks,g.id);
       const hasPick=ats||ou;
-      return (
-      <div key={g.id} className="gm lk">
+      return (<div key={g.id} className="gm lk">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
           <div style={{fontFamily:"var(--fm)",fontSize:10,color:"var(--red)"}}>{fmtTime(g.tipTime)}</div>
           <span className="bdg bdg-r" style={{fontSize:9}}>LOCKED</span>
@@ -652,7 +650,7 @@ function MakePicks({user,games,userPicks,setUserPicks,showToast}){
           {ou&&<span>TOTAL: {ou==="over"?"Over":"Under"} {g.total||""}</span>}
         </div>}
         {!hasPick&&<div style={{fontFamily:"var(--fm)",fontSize:10,color:"var(--red)",padding:"6px 10px",background:"var(--rg)",borderRadius:4}}>No pick submitted</div>}
-      </div>)})}
+      </div>);})}
       </>}
       </>})()}
   </div>);
