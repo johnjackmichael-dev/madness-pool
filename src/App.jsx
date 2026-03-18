@@ -99,16 +99,16 @@ function spread2(s){if(!s)return"PK";const n=parseFloat(s);if(isNaN(n))return"PK
 // Migration converts old → new automatically
 
 function migratePicks(roundPicks){
-  if(!roundPicks||typeof roundPicks!=="object")return{};
-  const migrated={};let needsMigration=false;
+  if(!roundPicks||typeof roundPicks!=="object")return {};
+  const migrated={};
   Object.entries(roundPicks).forEach(([key,val])=>{
+    if(!val||val==="")return; // skip empty/null values
     if(key.endsWith("_ats")||key.endsWith("_ou")){
-      migrated[key]=val; // already new format
+      migrated[key]=val;
     }else{
-      needsMigration=true;
-      // Old format — determine if ATS or OU based on value
       if(val==="over"||val==="under") migrated[`${key}_ou`]=val;
-      else migrated[`${key}_ats`]=val;
+      else if(val==="team1"||val==="team2") migrated[`${key}_ats`]=val;
+      // skip any other invalid values
     }
   });
   return migrated;
@@ -614,9 +614,21 @@ function ViewPicks({allPicks,users,games,allResults}){
 function Standings({allPicks,allResults,users,games}){
   const players=Object.entries(users).filter(([u])=>u!==COMMISSIONER_USER);
   const st=players.map(([un,ud])=>{let w=0,l=0,p=0,rS=0,rW=0;const up=allPicks[un]||{};
-    ROUNDS.forEach(r=>{const rp=migratePicks(up[r.id]||{});const rr=allResults[r.id]||{};if(Object.keys(rr).length>0)rW++;if(countPicks(rp)===r.requiredPicks)rS++;
-    Object.entries(rp).forEach(([pickKey,pickVal])=>{const res=getPickResult(allResults,r.id,pickKey,pickVal);if(!res)return;if(res==="win")w++;else if(res==="push")p++;else if(res==="loss")l++})});
-    return{un,ud,pts:w+p*.5,w,l,p,rS,rW,full:rW>0&&rS>=rW};
+    ROUNDS.forEach(r=>{
+      const rp=migratePicks(up[r.id]||{});
+      const locked=isLocked(r.id);
+      const hasGames=(games||[]).some(g=>g.roundId===r.id);
+      // Only count locked rounds with games for eligibility
+      if(locked&&hasGames)rW++;
+      if(locked&&hasGames&&countPicks(rp)===r.requiredPicks)rS++;
+      // Only score picks against graded results
+      Object.entries(rp).forEach(([pickKey,pickVal])=>{
+        const res=getPickResult(allResults,r.id,pickKey,pickVal);
+        if(!res)return;
+        if(res==="win")w++;else if(res==="push")p++;else if(res==="loss")l++;
+      });
+    });
+    return{un,ud,pts:w+p*.5,w,l,p,rS,rW,full:rW===0||rS>=rW};
   }).sort((a,b)=>b.pts-a.pts||b.w-a.w);
   const n=st.length,pot=n*PAYOUT_INFO.buyIn;
   const remaining=pot-25;
