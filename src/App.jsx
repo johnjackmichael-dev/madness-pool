@@ -716,8 +716,9 @@ function ViewPicks({allPicks,users,games,allResults}){
                         <Logo name={atsTeamName} size={24}/>
                       </div>}
                       {ou&&<div style={{fontFamily:"var(--fm)",fontSize:14,fontWeight:800,width:36,height:24,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:4,
-                        color:"#fff",
-                        background:ouResult==="win"?"var(--g)":ouResult==="loss"?"var(--red)":ouResult==="push"?"var(--ylw)":"var(--t4)"}}>
+                        color:ouResult?"#fff":(ou==="over"?"var(--t3)":"var(--t3)"),
+                        background:ouResult==="win"?"var(--g)":ouResult==="loss"?"var(--red)":ouResult==="push"?"var(--ylw)":"var(--bg3)",
+                        border:ouResult?("2px solid "+(ouResult==="win"?"var(--g)":ouResult==="loss"?"var(--red)":"var(--ylw)")):"1px solid var(--bdr)"}}>
                         {ou==="over"?"\u2191":"\u2193"}
                       </div>}
                       {!ats&&!ou&&<span style={{color:"var(--t5)",fontSize:10}}>—</span>}
