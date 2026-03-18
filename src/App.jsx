@@ -76,19 +76,47 @@ const S={
   },
 };
 
-function isLocked(rid){const r=ROUNDS.find(x=>x.id===rid);return r?new Date()>=new Date(r.lockDate):false}
-function fmtLock(rid){const r=ROUNDS.find(x=>x.id===rid);return r?new Date(r.lockDate).toLocaleString("en-US",{weekday:"short",month:"short",day:"numeric",hour:"numeric",minute:"2-digit",timeZoneName:"short"}):""}
-function countdown(rid){
-  const r=ROUNDS.find(x=>x.id===rid);if(!r)return{text:"",urgent:false};
-  const diff=new Date(r.lockDate)-new Date();if(diff<=0)return{text:"LOCKED",urgent:false};
+// Game-level locking based on tip time
+function isGameTipped(game){return game&&game.tipTime?new Date()>=new Date(game.tipTime):false}
+// Round is fully locked when ALL games in that round have tipped
+function isRoundFullyLocked(rid,games){const rg=(games||[]).filter(g=>g.roundId===rid);return rg.length>0&&rg.every(g=>isGameTipped(g))}
+// Round has any locked games
+function isRoundPartiallyLocked(rid,games){const rg=(games||[]).filter(g=>g.roundId===rid);return rg.some(g=>isGameTipped(g))}
+// For backwards compat — a round is "locked" for eligibility if all games tipped
+function isLocked(rid,games){return isRoundFullyLocked(rid,games)}
+
+function fmtTime(dateStr){if(!dateStr)return"TBD";return new Date(dateStr).toLocaleString("en-US",{weekday:"short",month:"short",day:"numeric",hour:"numeric",minute:"2-digit",timeZone:"America/Los_Angeles"})+" PT"}
+
+// Find the next game to tip off across entire tournament
+function getNextTipoff(games){
+  const now=new Date();
+  const upcoming=(games||[]).filter(g=>g.tipTime&&new Date(g.tipTime)>now).sort((a,b)=>new Date(a.tipTime)-new Date(b.tipTime));
+  return upcoming.length?upcoming[0]:null;
+}
+
+// Countdown to a specific date
+function countdownTo(dateStr){
+  if(!dateStr)return{text:"TBD",urgent:false,warning:false};
+  const diff=new Date(dateStr)-new Date();
+  if(diff<=0)return{text:"TIPPED",urgent:false};
   const d=Math.floor(diff/86400000),h=Math.floor((diff%86400000)/3600000),m=Math.floor((diff%3600000)/60000),s=Math.floor((diff%60000)/1000);
   const p=n=>String(n).padStart(2,"0"),urgent=diff<3600000,warning=diff<7200000;
   if(d>0)return{text:`${d}d ${h}h ${p(m)}m ${p(s)}s`,urgent:false,warning};
   if(h>0)return{text:`${h}h ${p(m)}m ${p(s)}s`,urgent,warning:true};
   return{text:`${p(m)}m ${p(s)}s`,urgent:true,warning:true};
 }
-function getNextUnlocked(){return ROUNDS.find(r=>new Date(r.lockDate)>new Date())||null}
-function getMostRecentLocked(){const locked=ROUNDS.filter(r=>new Date(r.lockDate)<=new Date());return locked.length?locked[locked.length-1]:null}
+
+// Get earliest tip time in a round (for round-level countdown)
+function getFirstTipInRound(rid,games){
+  const rg=(games||[]).filter(g=>g.roundId===rid&&g.tipTime).sort((a,b)=>new Date(a.tipTime)-new Date(b.tipTime));
+  return rg.length?rg[0].tipTime:null;
+}
+
+function getMostRecentLockedRound(games){
+  const locked=ROUNDS.filter(r=>isRoundFullyLocked(r.id,games));
+  return locked.length?locked[locked.length-1]:null;
+}
+
 function getUserDisplay(u){if(!u)return"Unknown";return`${u.username||""} (${u.firstName||""} ${(u.lastName||"").charAt(0).toUpperCase()}.)`}
 function cn(...a){return a.filter(Boolean).join(" ")}
 function spread2(s){if(!s)return"PK";const n=parseFloat(s);if(isNaN(n))return"PK";return n>0?`−${Math.abs(n)}`:`+${Math.abs(n)}`}
@@ -443,7 +471,7 @@ function Auth({onLogin}){
         <strong>Pick against the spread.</strong> Each round, pick a set number of games — choose a team to cover the spread or the over/under on the total. You decide which type for each pick.<br/><br/>
         <strong>Points:</strong> 1 point per win, 0.5 for a push, 0 for a loss. Most points at the end wins the pot.<br/><br/>
         <strong>Last place pays out</strong> — but only if you submit 100% of your picks. Miss a round? You're ineligible for the toilet bowl.<br/><br/>
-        <strong>Picks lock</strong> at set times each round. Once locked, no changes. The countdown is always visible at the top of every page.<br/><br/>
+        <strong>Picks lock at tip-off.</strong> Each game locks individually when it tips. You can still change picks for later games while early games are live. All times are Pacific (PT).<br/><br/>
         <strong>Buy-in:</strong> $25 &middot; <strong>3rd:</strong> $25 flat &middot; <strong>Remaining pot:</strong> 1st 55% / 2nd 25% / Last 20%
       </div>
     </div></div>
@@ -454,21 +482,27 @@ function Auth({onLogin}){
 function CountdownBar({userPicks,games}){
   const[,setT]=useState(0);
   useEffect(()=>{const i=setInterval(()=>setT(t=>t+1),1000);return()=>clearInterval(i)},[]);
-  const next=getNextUnlocked();
-  if(!next) return <div className="cd-bar"><div className="cd-left"><span className="cd-round">ALL ROUNDS LOCKED</span></div><div className="cd-locked">TOURNAMENT COMPLETE</div></div>;
-  const cd=countdown(next.id),picks=migratePicks((userPicks||{})[next.id]||{}),submitted=countPicks(picks),needed=next.requiredPicks,done=submitted>=needed;
-  const hasGames=(games||[]).some(g=>g.roundId===next.id);
-  return(
+  const nextGame=getNextTipoff(games);
+  if(!nextGame) return <div className="cd-bar"><div className="cd-left"><span className="cd-round">ALL GAMES TIPPED</span></div><div className="cd-locked">TOURNAMENT IN PROGRESS</div></div>;
+  const round=ROUNDS.find(r=>r.id===nextGame.roundId);
+  const cd=countdownTo(nextGame.tipTime);
+  // Count picks for this round
+  const roundPicks=migratePicks((userPicks||{})[nextGame.roundId]||{});
+  const submitted=countPicks(roundPicks);
+  const needed=round?round.requiredPicks:0;
+  const done=submitted>=needed&&needed>0;
+  const hasGames=(games||[]).some(g=>g.roundId===nextGame.roundId);
+  return (
     <div className={cn("cd-bar",cd.urgent&&"urg",!cd.urgent&&cd.warning&&"warn",done&&"cd-done-bar",!done&&hasGames&&"cd-notdone-bar")}>
       <div className="cd-left">
-        <span className="cd-round">{next.name}</span>
+        <span className="cd-round">{round?round.name:"NEXT GAME"}</span>
         <div className="cd-meta">
           {done
             ? <span className="cd-status-pill cd-pill-done">PICKS FINALIZED</span>
             : hasGames
               ? <span className="cd-status-pill cd-pill-notdone">NOT SUBMITTED — {submitted}/{needed}</span>
               : <span className="cd-status-pill cd-pill-wait">GAMES NOT YET POSTED</span>}
-          <span className="cd-lock-time">Locks {fmtLock(next.id)}</span>
+          <span className="cd-lock-time">Next tip: {fmtTime(nextGame.tipTime)}</span>
         </div>
       </div>
       <div className="cd-timer">{cd.text}</div>
@@ -478,15 +512,20 @@ function CountdownBar({userPicks,games}){
 
 // ─── Make Picks ──────────────────────────────────────────────────────────────
 function MakePicks({user,games,userPicks,setUserPicks,showToast}){
-  const[sr,setSr]=useState(()=>{const n=getNextUnlocked();return n?n.id:ROUNDS[0].id});
-  const round=ROUNDS.find(r=>r.id===sr),rGames=(games||[]).filter(g=>g.roundId===sr),locked=isLocked(sr);
+  const[sr,setSr]=useState(()=>{
+    // Default to round with next untipped game
+    const nextGame=getNextTipoff(games);
+    if(nextGame) return nextGame.roundId;
+    return ROUNDS[0].id;
+  });
+  const round=ROUNDS.find(r=>r.id===sr),rGames=(games||[]).filter(g=>g.roundId===sr);
   const picks=migratePicks(userPicks[sr]||{});
   const pc=countPicks(picks),done=pc===round.requiredPicks;
   const atMax=pc>=round.requiredPicks;
   const savingRef=useRef(false);
 
-  const toggleAts=async(gid,val)=>{
-    if(locked||savingRef.current)return;
+  const toggleAts=async(gid,game,val)=>{
+    if(isGameTipped(game)||savingRef.current)return;
     savingRef.current=true;
     const freshPicks=(await S.getShared(`picks:${user}`))||{};
     const cur=migratePicks(freshPicks[sr]||{});
@@ -501,8 +540,8 @@ function MakePicks({user,games,userPicks,setUserPicks,showToast}){
     if(countPicks(cur)===round.requiredPicks)showToast(`All ${round.requiredPicks} picks submitted for ${round.name}`);
   };
 
-  const toggleOu=async(gid,val)=>{
-    if(locked||savingRef.current)return;
+  const toggleOu=async(gid,game,val)=>{
+    if(isGameTipped(game)||savingRef.current)return;
     savingRef.current=true;
     const freshPicks=(await S.getShared(`picks:${user}`))||{};
     const cur=migratePicks(freshPicks[sr]||{});
@@ -517,31 +556,36 @@ function MakePicks({user,games,userPicks,setUserPicks,showToast}){
     if(countPicks(cur)===round.requiredPicks)showToast(`All ${round.requiredPicks} picks submitted for ${round.name}`);
   };
 
-  const missedRounds=ROUNDS.filter(r=>isLocked(r.id)&&countPicks(migratePicks(userPicks[r.id]||{}))<r.requiredPicks&&(games||[]).some(g=>g.roundId===r.id));
+  const missedRounds=ROUNDS.filter(r=>isRoundFullyLocked(r.id,games)&&countPicks(migratePicks(userPicks[r.id]||{}))<r.requiredPicks&&(games||[]).some(g=>g.roundId===r.id));
+
+  // Round-level info
+  const firstTip=getFirstTipInRound(sr,games);
+  const roundFullyLocked=isRoundFullyLocked(sr,games);
+  const roundCD=firstTip?countdownTo(firstTip):{text:"TBD",urgent:false};
 
   return (<div className="an"><div className="st">MAKE YOUR PICKS</div>
     {missedRounds.length>0&&<div className="missed">
       You missed {missedRounds.length} round{missedRounds.length>1?"s":""}: {missedRounds.map(r=>r.name).join(", ")}. Submit all future picks to stay eligible for last place.
     </div>}
     <div className="fld"><label className="lbl">Round</label><select className="inp" value={sr} onChange={e=>setSr(e.target.value)}>
-      {ROUNDS.map(r=>{const l=isLocked(r.id),up=countPicks(migratePicks(userPicks[r.id]||{})),d=up===r.requiredPicks;
-        return <option key={r.id} value={r.id}>{l?(d?"\u2705 ":"\u274C "):(d?"\u2705 ":"")} {r.name} — {r.requiredPicks} picks {l?(d?"(submitted)":"(missed)"):(d?"(ready)":"")}</option>})}
+      {ROUNDS.map(r=>{const fl=isRoundFullyLocked(r.id,games),up=countPicks(migratePicks(userPicks[r.id]||{})),d=up===r.requiredPicks;
+        return <option key={r.id} value={r.id}>{fl?(d?"\u2705 ":"\u274C "):(d?"\u2705 ":"")} {r.name} — {r.requiredPicks} picks {fl?(d?"(submitted)":"(missed)"):(d?"(ready)":"")}</option>})}
     </select></div>
-    <div className="lbar"><div style={{color:"var(--t3)",fontSize:11}}>Locks {fmtLock(sr)}</div><div style={{fontFamily:"var(--fm)",fontWeight:700,fontSize:13}}>{locked? <span style={{color:"var(--red)"}}>LOCKED</span>: <span style={{color:"var(--g)"}}>{countdown(sr).text}</span>}</div></div>
+    <div className="lbar"><div style={{color:"var(--t3)",fontSize:11}}>First tip: {firstTip?fmtTime(firstTip):"TBD"}</div><div style={{fontFamily:"var(--fm)",fontWeight:700,fontSize:13}}>{roundFullyLocked? <span style={{color:"var(--red)"}}>ALL TIPPED</span>: <span style={{color:"var(--g)"}}>{roundCD.text}</span>}</div></div>
 
-    {done&&!locked&&<div className="sub-banner">
+    {done&&!roundFullyLocked&&<div className="sub-banner">
       <div className="sb-icon">{"\u2713"}</div>
-      <div><div className="sb-text">ALL {round.requiredPicks} PICKS SUBMITTED</div><div className="sb-sub">Your picks for {round.name} are locked in. You can still change them until the round locks.</div></div>
+      <div><div className="sb-text">ALL {round.requiredPicks} PICKS SUBMITTED</div><div className="sb-sub">Your picks for {round.name} are locked in. You can still change picks for untipped games.</div></div>
     </div>}
-    {done&&locked&&<div className="sub-banner is-locked">
+    {done&&roundFullyLocked&&<div className="sub-banner is-locked">
       <div className="sb-icon">{"\u2713"}</div>
-      <div><div className="sb-text">PICKS SUBMITTED {"&"} LOCKED</div><div className="sb-sub">{round.name} — {round.requiredPicks}/{round.requiredPicks} picks final. No changes allowed.</div></div>
+      <div><div className="sb-text">PICKS SUBMITTED {"&"} LOCKED</div><div className="sb-sub">{round.name} — {round.requiredPicks}/{round.requiredPicks} picks final. All games tipped.</div></div>
     </div>}
-    {!done&&locked&&rGames.length>0&&<div className="missed">
-      MISSED — You submitted {pc}/{round.requiredPicks} picks before this round locked.
+    {!done&&roundFullyLocked&&rGames.length>0&&<div className="missed">
+      MISSED — You submitted {pc}/{round.requiredPicks} picks. All games have tipped.
     </div>}
 
-    {!locked&&rGames.length>0&&<>
+    {!roundFullyLocked&&rGames.length>0&&<>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:4}}>
         <span style={{fontFamily:"var(--fm)",fontSize:12,fontWeight:700,color:done?"var(--g)":"var(--t2)"}}>{pc} / {round.requiredPicks} PICKS</span>
         {!done&&<span style={{fontFamily:"var(--fm)",fontSize:11,color:"var(--red)",fontWeight:600}}>NOT YET FINALIZED</span>}
@@ -555,14 +599,23 @@ function MakePicks({user,games,userPicks,setUserPicks,showToast}){
     rGames.map(g=>{
       const ats=getAts(picks,g.id), ou=getOu(picks,g.id);
       const hasPick=ats||ou;
-      const canPickAts=!locked&&(!atMax||ats);
-      const canPickOu=!locked&&(!atMax||ou);
+      const tipped=isGameTipped(g);
+      const canPickAts=!tipped&&(!atMax||ats);
+      const canPickOu=!tipped&&(!atMax||ou);
       const s1=parseInt(g.seed1)||99,s2=parseInt(g.seed2)||99;
       const awayName=s1>s2?g.team1:g.team2, homeName=s1>s2?g.team2:g.team1;
       const awaySeed=s1>s2?g.seed1:g.seed2, homeSeed=s1>s2?g.seed2:g.seed1;
       const displaySpread=g.spread||"PK";
+      const gameCd=g.tipTime?countdownTo(g.tipTime):null;
       return (
-      <div key={g.id} className={cn("gm",hasPick&&"sel",locked&&"lk")}>
+      <div key={g.id} className={cn("gm",hasPick&&"sel",tipped&&"lk")}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <div style={{fontFamily:"var(--fm)",fontSize:10,color:tipped?"var(--red)":"var(--t4)"}}>
+            {g.tipTime?fmtTime(g.tipTime):"Tip time TBD"}
+          </div>
+          {tipped&&<span className="bdg bdg-r" style={{fontSize:9}}>LOCKED</span>}
+          {!tipped&&gameCd&&<span style={{fontFamily:"var(--fm)",fontSize:10,fontWeight:700,color:gameCd.urgent?"var(--red)":gameCd.warning?"var(--ylw)":"var(--g)"}}>{gameCd.text}</span>}
+        </div>
         <div className="gm-mu"><div className="gm-ts">
           <div className="gm-t away"><span className="gm-sd">{awaySeed}</span><Logo name={awayName} size={36}/><span>{awayName}</span></div>
           <div className="gm-t"><span className="gm-sd">{homeSeed}</span><Logo name={homeName} size={36}/><span>{homeName}</span><span className="gm-home-tag">HOME</span></div>
@@ -570,29 +623,29 @@ function MakePicks({user,games,userPicks,setUserPicks,showToast}){
         <div className="gm-divider"/>
         <div className="pk-row-label">SPREAD {ats&&<span style={{color:"var(--g)",marginLeft:6}}>PICKED</span>}</div>
         <div className="pk-row">
-          <button className={cn("pk",ats==="team1"&&"on")} onClick={()=>toggleAts(g.id,"team1")} disabled={locked||(!canPickAts&&ats!=="team1")}>{g.team1} {g.spread||"PK"}</button>
-          <button className={cn("pk",ats==="team2"&&"on")} onClick={()=>toggleAts(g.id,"team2")} disabled={locked||(!canPickAts&&ats!=="team2")}>{g.team2} {spread2(g.spread)}</button>
+          <button className={cn("pk",ats==="team1"&&"on")} onClick={()=>toggleAts(g.id,g,"team1")} disabled={tipped||(!canPickAts&&ats!=="team1")}>{g.team1} {g.spread||"PK"}</button>
+          <button className={cn("pk",ats==="team2"&&"on")} onClick={()=>toggleAts(g.id,g,"team2")} disabled={tipped||(!canPickAts&&ats!=="team2")}>{g.team2} {spread2(g.spread)}</button>
         </div>
         <div className="pk-row-label">TOTAL {ou&&<span style={{color:"var(--g)",marginLeft:6}}>PICKED</span>}</div>
         <div className="pk-row">
-          <button className={cn("pk",ou==="over"&&"on")} onClick={()=>toggleOu(g.id,"over")} disabled={locked||(!canPickOu&&ou!=="over")}>Over {g.total||""}</button>
-          <button className={cn("pk",ou==="under"&&"on")} onClick={()=>toggleOu(g.id,"under")} disabled={locked||(!canPickOu&&ou!=="under")}>Under {g.total||""}</button>
+          <button className={cn("pk",ou==="over"&&"on")} onClick={()=>toggleOu(g.id,g,"over")} disabled={tipped||(!canPickOu&&ou!=="over")}>Over {g.total||""}</button>
+          <button className={cn("pk",ou==="under"&&"on")} onClick={()=>toggleOu(g.id,g,"under")} disabled={tipped||(!canPickOu&&ou!=="under")}>Under {g.total||""}</button>
         </div>
-        {atMax&&!ats&&!ou&&!locked&&<div className="pk-full">All {round.requiredPicks} picks used — deselect one to pick this game</div>}
+        {atMax&&!ats&&!ou&&!tipped&&<div className="pk-full">All {round.requiredPicks} picks used — deselect one to pick this game</div>}
       </div>)})}
   </div>);
 }
 
 // ─── View Picks (The Board) ──────────────────────────────────────────────────
 function ViewPicks({allPicks,users,games,allResults}){
-  const[sr,setSr]=useState(()=>{const m=getMostRecentLocked();return m?m.id:ROUNDS[0].id});
-  const[sp,setSp]=useState(null);const locked=isLocked(sr),rGames=(games||[]).filter(g=>g.roundId===sr),results=allResults[sr]||{};
+  const[sr,setSr]=useState(()=>{const m=getMostRecentLockedRound(games);return m?m.id:ROUNDS[0].id});
+  const[sp,setSp]=useState(null);const roundLocked=isRoundFullyLocked(sr,games);const rGames=(games||[]).filter(g=>g.roundId===sr);const results=allResults[sr]||{};
   const players=Object.entries(users).filter(([u])=>u!==COMMISSIONER_USER);
   return(<div className="an"><div className="st">THE BOARD — PLAYER PICKS</div>
     <div className="fld"><label className="lbl">Round</label><select className="inp" value={sr} onChange={e=>{setSr(e.target.value);setSp(null)}}>
-      {ROUNDS.map(r=><option key={r.id} value={r.id}>{r.name} {isLocked(r.id)?"(viewable)":"(hidden until lock)"}</option>)}
+      {ROUNDS.map(r=><option key={r.id} value={r.id}>{r.name} {isRoundPartiallyLocked(r.id,games)?"(viewable)":"(hidden until tip)"}</option>)}
     </select></div>
-    {!locked?<div className="ey"><p>Picks are hidden until this round locks.<br/>Lock time: {fmtLock(sr)}</p></div>:<>
+    {!isRoundPartiallyLocked(sr,games)?<div className="ey"><p>Picks are hidden until games tip off.<br/>First tip: {getFirstTipInRound(sr,games)?fmtTime(getFirstTipInRound(sr,games)):"TBD"}</p></div>:<>
       <div style={{marginBottom:14}}><label className="lbl">Player</label><div>{players.map(([un,ud])=>{
         const hasPicks=Object.keys((allPicks[un]||{})[sr]||{}).length>0;
         return <button key={un} className={cn("chp",sp===un&&"on")} onClick={()=>setSp(un)} style={!hasPicks?{opacity:.5}:{}}>{getUserDisplay(ud)} {!hasPicks?"(none)":""}</button>
@@ -616,7 +669,7 @@ function Standings({allPicks,allResults,users,games}){
   const st=players.map(([un,ud])=>{let w=0,l=0,p=0,rS=0,rW=0;const up=allPicks[un]||{};
     ROUNDS.forEach(r=>{
       const rp=migratePicks(up[r.id]||{});
-      const locked=isLocked(r.id);
+      const locked=isRoundFullyLocked(r.id,games);
       const hasGames=(games||[]).some(g=>g.roundId===r.id);
       // Only count locked rounds with games for eligibility
       if(locked&&hasGames)rW++;
@@ -642,14 +695,13 @@ function Standings({allPicks,allResults,users,games}){
   const eligiblePlayers=st.filter(s=>s.full);
   const toiletBowlUser=eligiblePlayers.length>1?eligiblePlayers[eligiblePlayers.length-1].un:null;
 
-  // Find current active round(s) for "games left" — rounds that are locked but not fully graded
+  // Find current active round(s) for "games left" — rounds with tipped but ungraded games
   const activeRounds=ROUNDS.filter(r=>{
-    if(!isLocked(r.id))return false;
+    if(!isRoundPartiallyLocked(r.id,games))return false;
     const rr=allResults[r.id]||{};
     const roundGames=(games||[]).filter(g=>g.roundId===r.id);
     if(roundGames.length===0)return false;
-    // Round is active if any game is ungraded
-    return roundGames.some(g=>!rr[g.id]||(!rr[g.id].team1&&!rr[g.id].over));
+    return roundGames.some(g=>isGameTipped(g)&&(!rr[g.id]||(!rr[g.id].team1&&!rr[g.id].over)));
   });
 
   // Count pending picks per player for active rounds
@@ -710,7 +762,7 @@ function TrashTalk({user,userData}){
   const send=async()=>{const v=val.trim();if(!v||v.length>500)return;const m=(await S.getShared("pool:chat"))||[];m.push({user,displayName:getUserDisplay(userData),text:v,time:Date.now()});if(m.length>200)m.splice(0,m.length-200);await S.setShared("pool:chat",m);setVal("");setMsgs(m)};
   return(<div className="an"><div className="st">TRASH TALK</div><div className="cw"><div className="cf-feed">
     {busy?<div className="ey ld">Loading...</div>:msgs.length===0?<div className="ey"><p>No messages yet. Be the first to talk trash.</p></div>:
-    msgs.map((m,i)=><div key={i} className={cn("cb",m.user===user&&"me")}><div className="cbu">{m.displayName||m.user}</div><div className="cbt">{m.text}</div><div className="cbts">{new Date(m.time).toLocaleString()}</div></div>)}
+    msgs.map((m,i)=><div key={i} className={cn("cb",m.user===user&&"me")}><div className="cbu">{m.displayName||m.user}</div><div className="cbt">{m.text}</div><div className="cbts">{new Date(m.time).toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit",timeZone:"America/Los_Angeles"})} PT</div></div>)}
     <div ref={btm}/></div><div className="ci">
       <input className="inp" placeholder="Talk trash..." value={val} onChange={e=>setVal(e.target.value.slice(0,500))} onKeyDown={e=>e.key==="Enter"&&send()} maxLength={500}/>
       {val.length>400&&<span className="char-count">{500-val.length}</span>}
@@ -723,10 +775,10 @@ function History({user,games,userPicks,allResults}){
   return (<div className="an"><div className="st">MY PICK HISTORY</div>
     {ROUNDS.map(round=>{
       const picks=migratePicks((userPicks||{})[round.id]||{});const rg=(games||[]).filter(g=>g.roundId===round.id);
-      const locked=isLocked(round.id),hasGames=rg.length>0,pc=countPicks(picks),hasPicks=pc>0;
-      const missed=locked&&hasGames&&!hasPicks;
-      const incomplete=locked&&hasGames&&hasPicks&&pc<round.requiredPicks;
-      if(!locked&&!hasPicks) return null;
+      const roundLocked=isRoundFullyLocked(round.id,games),hasGames=rg.length>0,pc=countPicks(picks),hasPicks=pc>0;
+      const missed=roundLocked&&hasGames&&!hasPicks;
+      const incomplete=roundLocked&&hasGames&&hasPicks&&pc<round.requiredPicks;
+      if(!roundLocked&&!hasPicks) return null;
       let rw=0,rl=0,rp=0;Object.entries(picks).forEach(([pickKey,pickVal])=>{const r=getPickResult(allResults,round.id,pickKey,pickVal);if(r==="win")rw++;else if(r==="loss")rl++;else if(r==="push")rp++});
       return <div key={round.id} className="crd" style={{marginBottom:14}}>
         <div className="crd-t">{round.name}
@@ -734,7 +786,7 @@ function History({user,games,userPicks,allResults}){
           {missed&&<span className="bdg bdg-r">MISSED</span>}
           {incomplete&&<span className="bdg bdg-y">INCOMPLETE ({pc}/{round.requiredPicks})</span>}
         </div>
-        {missed?<div style={{color:"var(--red)",fontSize:12,fontFamily:"var(--fm)"}}>No picks submitted — round locked without entries.</div>:
+        {missed?<div style={{color:"var(--red)",fontSize:12,fontFamily:"var(--fm)"}}>No picks submitted — all games tipped without entries.</div>:
         Object.entries(picks).map(([pickKey,pickVal])=>{const gid=pickGameId(pickKey);const gm=rg.find(g=>g.id===gid);const st=getPickResult(allResults,round.id,pickKey,pickVal)||"pending";
         const pl=pickVal==="team1"?`${gm?.team1||"?"} ${gm?.spread||"PK"}`:pickVal==="team2"?`${gm?.team2||"?"} ${spread2(gm?.spread)}`:pickVal==="over"?`Over ${gm?.total||""}`:`Under ${gm?.total||""}`;
         const typeLabel=pickType(pickKey)==="ats"?"ATS":"O/U";
@@ -742,14 +794,14 @@ function History({user,games,userPicks,allResults}){
         <div style={{fontSize:13,marginTop:3,display:"flex",alignItems:"center",gap:7}}><Logo name={pickVal==="team1"?gm?.team1:pickVal==="team2"?gm?.team2:gm?.team1} size={18}/>{pl}</div></div>
         <span className={cn("rb",st==="win"?"rw":st==="loss"?"rl":st==="push"?"rp":"rq")}>{st==="win"?"WIN":st==="loss"?"LOSS":st==="push"?"PUSH":"PENDING"}</span></div>})}
       </div>}).filter(Boolean)}
-    {ROUNDS.every(r=>!isLocked(r.id))&&Object.values(userPicks||{}).every(r=>!Object.keys(r).length)&&<div className="ey"><p>No picks yet. Head to Make Picks to get started.</p></div>}
+    {ROUNDS.every(r=>!isRoundFullyLocked(r.id,games))&&Object.values(userPicks||{}).every(r=>!Object.keys(r).length)&&<div className="ey"><p>No picks yet. Head to Make Picks to get started.</p></div>}
   </div>);
 }
 
 // ─── Commissioner ────────────────────────────────────────────────────────────
 function Commish({games,setGames,allResults,setAllResults,allPicks,setAllPicks,users,setUsers,showToast,loadData}){
   const[sr,setSr]=useState(ROUNDS[0].id);const[subTab,setSubTab]=useState("games");
-  const[f,sF]=useState({team1:"",team2:"",seed1:"",seed2:"",spread:"",total:""});
+  const[f,sF]=useState({team1:"",team2:"",seed1:"",seed2:"",spread:"",total:"",tipTime:""});
   const[editUser,setEditUser]=useState(null);const[editRound,setEditRound]=useState(ROUNDS[0].id);
   const[saving,setSaving]=useState(false);
   const rg=(games||[]).filter(g=>g.roundId===sr);const res=allResults[sr]||{};
@@ -758,11 +810,14 @@ function Commish({games,setGames,allResults,setAllResults,allPicks,setAllPicks,u
   const add=async()=>{if(!f.team1||!f.team2||saving)return;
     setSaving(true);
     const fresh=(await S.getShared("pool:games"))||[];
-    const g={id:`g_${Date.now()}`,roundId:sr,...Object.fromEntries(Object.entries(f).map(([k,v])=>[k,typeof v==="string"?v.trim():v]))};
+    const fields=Object.fromEntries(Object.entries(f).map(([k,v])=>[k,typeof v==="string"?v.trim():v]));
+    // Convert tipTime from datetime-local to ISO string
+    if(fields.tipTime){fields.tipTime=new Date(fields.tipTime).toISOString()}
+    const g={id:`g_${Date.now()}`,roundId:sr,...fields};
     const up=[...fresh,g];
     await S.setShared("pool:games",up);
     setGames(up);
-    sF({team1:"",team2:"",seed1:"",seed2:"",spread:"",total:""});
+    sF({team1:"",team2:"",seed1:"",seed2:"",spread:"",total:"",tipTime:""});
     setSaving(false);
     showToast("Game added")};
   const rm=async id=>{setSaving(true);
@@ -860,7 +915,7 @@ function Commish({games,setGames,allResults,setAllResults,allPicks,setAllPicks,u
       <div className="fld"><label className="lbl">Round</label><select className="inp" value={sr} onChange={e=>setSr(e.target.value)}>
         {ROUNDS.map(r=><option key={r.id} value={r.id}>{r.name} — {r.requiredPicks} picks</option>)}
       </select></div>
-      <div className="lbar" style={{marginBottom:14}}><div style={{color:"var(--t3)",fontSize:13}}>Lock: {fmtLock(sr)}</div><div>{isLocked(sr)?<span className="bdg bdg-r">LOCKED</span>:<span className="bdg bdg-g">OPEN</span>}</div></div>
+      <div className="lbar" style={{marginBottom:14}}><div style={{color:"var(--t3)",fontSize:13}}>First tip: {getFirstTipInRound(sr,games)?fmtTime(getFirstTipInRound(sr,games)):"TBD"}</div><div>{isRoundFullyLocked(sr,games)?<span className="bdg bdg-r">ALL TIPPED</span>:isRoundPartiallyLocked(sr,games)?<span className="bdg bdg-y">IN PROGRESS</span>:<span className="bdg bdg-g">OPEN</span>}</div></div>
       <div className="crd"><div className="crd-t">ADD GAME</div>
         <div className="cf2">
           <div><label className="lbl">Team 1</label><select className="inp" value={f.team1} onChange={e=>sF({...f,team1:e.target.value})}><option value="">Select team...</option>{TEAMS.filter(t=>t!==f.team2).map(t=><option key={t} value={t}>{t}</option>)}</select></div>
@@ -869,6 +924,7 @@ function Commish({games,setGames,allResults,setAllResults,allPicks,setAllPicks,u
           <div><label className="lbl">Seed 2</label><input className="inp" placeholder="e.g. 16" value={f.seed2} onChange={e=>sF({...f,seed2:e.target.value})}/></div>
           <div><label className="lbl">Spread</label><input className="inp" placeholder="e.g. -3.5" value={f.spread} onChange={e=>sF({...f,spread:e.target.value})}/></div>
           <div><label className="lbl">Total (O/U)</label><input className="inp" placeholder="e.g. 142.5" value={f.total} onChange={e=>sF({...f,total:e.target.value})}/></div>
+          <div className="full"><label className="lbl">Tip Time</label><input className="inp" type="datetime-local" value={f.tipTime} onChange={e=>sF({...f,tipTime:e.target.value})}/></div>
           {f.team1&&f.team2&&<div className="full" style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",justifyContent:"center",background:"var(--bg3)",borderRadius:6}}>
             <Logo name={f.team1} size={32}/><span style={{fontWeight:800,fontSize:14,letterSpacing:1}}>{f.team1}</span>
             <span style={{color:"var(--t4)",fontFamily:"var(--fm)",fontSize:10}}>vs</span>
@@ -900,7 +956,7 @@ function Commish({games,setGames,allResults,setAllResults,allPicks,setAllPicks,u
               <span style={{fontWeight:900,fontSize:18,letterSpacing:1,textTransform:"uppercase",color:"var(--navy)"}}>({g.seed2}) {g.team2}</span>
               <Logo name={g.team2} size={32}/>
             </div>
-            {/* Editable spread and total — big, clear, high contrast */}
+            {/* Editable spread, total, and tip time */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
               <div>
                 <label style={{fontFamily:"var(--fm)",fontSize:10,fontWeight:700,color:"var(--navy)",letterSpacing:1.5,display:"block",marginBottom:4}}>SPREAD</label>
@@ -916,6 +972,13 @@ function Commish({games,setGames,allResults,setAllResults,allPicks,setAllPicks,u
                   onBlur={()=>saveGameLine(g.id,"total")}
                   placeholder="e.g. 142.5"/>
               </div>
+            </div>
+            <div style={{marginBottom:14}}>
+              <label style={{fontFamily:"var(--fm)",fontSize:10,fontWeight:700,color:"var(--navy)",letterSpacing:1.5,display:"block",marginBottom:4}}>TIP TIME {isGameTipped(g)&&<span style={{color:"var(--red)",marginLeft:6}}>TIPPED</span>}{!isGameTipped(g)&&g.tipTime&&<span style={{color:"var(--g)",marginLeft:6}}>{countdownTo(g.tipTime).text}</span>}</label>
+              <input className="inp" type="datetime-local" style={{fontSize:14,fontWeight:600,fontFamily:"var(--fm)",color:"var(--navy)",padding:"10px 12px"}}
+                value={g.tipTime?(()=>{const d=new Date(g.tipTime);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`})():""} 
+                onChange={e=>{const iso=e.target.value?new Date(e.target.value).toISOString():"";updateGameLine(g.id,"tipTime",iso)}}
+                onBlur={()=>saveGameLine(g.id,"tipTime")}/>
             </div>
             {/* Grading */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
