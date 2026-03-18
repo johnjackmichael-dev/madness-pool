@@ -515,7 +515,7 @@ function MakePicks({user,games,userPicks,setUserPicks,showToast}){
     if(nextGame) return nextGame.roundId;
     return ROUNDS[0].id;
   });
-  const round=ROUNDS.find(r=>r.id===sr),rGames=(games||[]).filter(g=>g.roundId===sr);
+  const round=ROUNDS.find(r=>r.id===sr),rGames=(games||[]).filter(g=>g.roundId===sr).sort((a,b)=>{if(!a.tipTime)return 1;if(!b.tipTime)return -1;return new Date(a.tipTime)-new Date(b.tipTime)});
   const picks=migratePicks(userPicks[sr]||{});
   const pc=countPicks(picks),done=pc===round.requiredPicks;
   const atMax=pc>=round.requiredPicks;
