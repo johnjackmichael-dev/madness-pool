@@ -735,6 +735,25 @@ function Commish({games,setGames,allResults,setAllResults,allPicks,setAllPicks,u
     setUsers({});setGames([]);setAllResults({});setAllPicks({});setConfirmReset(false);showToast("Pool reset — starting fresh");
   };
 
+  const[editingLines,setEditingLines]=useState({});
+  const updateGameLine=(gameId,field,value)=>{
+    setEditingLines(prev=>({...prev,[`${gameId}_${field}`]:value}));
+    // Update local display immediately
+    const updated=games.map(g=>g.id===gameId?{...g,[field]:value}:g);
+    setGames(updated);
+  };
+  const saveGameLine=async(gameId,field)=>{
+    const key=`${gameId}_${field}`;
+    const value=editingLines[key];
+    if(value===undefined)return;
+    setSaving(true);
+    const fresh=(await S.getShared("pool:games"))||[];
+    const idx=fresh.findIndex(g=>g.id===gameId);
+    if(idx!==-1){fresh[idx]={...fresh[idx],[field]:value};await S.setShared("pool:games",fresh)}
+    setEditingLines(prev=>{const n={...prev};delete n[key];return n});
+    setSaving(false);
+    showToast("Line updated")};
+
   return(<div className="an"><div className="st">COMMISSIONER PANEL</div>
     <div className="stabs">
       <button className={cn("stab",subTab==="games"&&"on")} onClick={()=>setSubTab("games")}>GAMES</button>
@@ -747,7 +766,7 @@ function Commish({games,setGames,allResults,setAllResults,allPicks,setAllPicks,u
       <div className="fld"><label className="lbl">Round</label><select className="inp" value={sr} onChange={e=>setSr(e.target.value)}>
         {ROUNDS.map(r=><option key={r.id} value={r.id}>{r.name} — {r.requiredPicks} picks</option>)}
       </select></div>
-      <div className="lbar" style={{marginBottom:14}}><div style={{color:"var(--t3)",fontSize:11}}>Lock: {fmtLock(sr)}</div><div>{isLocked(sr)?<span className="bdg bdg-r">LOCKED</span>:<span className="bdg bdg-g">OPEN</span>}</div></div>
+      <div className="lbar" style={{marginBottom:14}}><div style={{color:"var(--t3)",fontSize:13}}>Lock: {fmtLock(sr)}</div><div>{isLocked(sr)?<span className="bdg bdg-r">LOCKED</span>:<span className="bdg bdg-g">OPEN</span>}</div></div>
       <div className="crd"><div className="crd-t">ADD GAME</div>
         <div className="cf2">
           <div><label className="lbl">Team 1</label><select className="inp" value={f.team1} onChange={e=>sF({...f,team1:e.target.value})}><option value="">Select team...</option>{TEAMS.filter(t=>t!==f.team2).map(t=><option key={t} value={t}>{t}</option>)}</select></div>
@@ -771,21 +790,49 @@ function Commish({games,setGames,allResults,setAllResults,allPicks,setAllPicks,u
           </div>})()}
         {rg.length===0?<div className="ey"><p>No games added.</p></div>:rg.map(g=>{
           const isGraded=res[g.id]&&(res[g.id].team1||res[g.id].over);
-          return <div key={g.id} style={{padding:"14px 0",borderBottom:"1px solid var(--bdr)",background:isGraded?"rgba(22,163,74,0.03)":"transparent",margin:"0 -22px",paddingLeft:22,paddingRight:22}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-              <div style={{display:"flex",alignItems:"center",gap:8}}>
-                {isGraded&&<span style={{color:"var(--g)",fontWeight:800,fontSize:11,fontFamily:"var(--fm)"}}>GRADED</span>}
-                {!isGraded&&<span style={{color:"var(--t5)",fontWeight:800,fontSize:11,fontFamily:"var(--fm)"}}>PENDING</span>}
-                <Logo name={g.team1} size={24}/><span style={{fontWeight:800,fontSize:13,letterSpacing:1,textTransform:"uppercase"}}>({g.seed1}) {g.team1} vs ({g.seed2}) {g.team2}</span><Logo name={g.team2} size={24}/>
+          return <div key={g.id} style={{padding:"18px 22px",borderBottom:"2px solid var(--bdr)",background:isGraded?"rgba(22,163,74,0.04)":"transparent",margin:"0 -22px"}}>
+            {/* Matchup header — big and clear */}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                {isGraded?<span style={{color:"var(--g)",fontWeight:800,fontSize:12,fontFamily:"var(--fm)",background:"var(--gg)",padding:"3px 8px",borderRadius:3}}>GRADED</span>
+                :<span style={{color:"var(--red)",fontWeight:800,fontSize:12,fontFamily:"var(--fm)",background:"var(--rg)",padding:"3px 8px",borderRadius:3}}>PENDING</span>}
               </div>
-              <button className="btn btn-d btn-sm" onClick={()=>rm(g.id)}>REMOVE</button></div>
-            <div style={{fontFamily:"var(--fm)",fontSize:9,color:"var(--t5)",margin:"4px 0 10px",letterSpacing:1}}>SPREAD: {g.spread||"PK"} / O/U: {g.total||"–"}</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              <button className="btn btn-d btn-sm" onClick={()=>rm(g.id)}>REMOVE</button>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
+              <Logo name={g.team1} size={32}/>
+              <span style={{fontWeight:900,fontSize:18,letterSpacing:1,textTransform:"uppercase",color:"var(--navy)"}}>({g.seed1}) {g.team1}</span>
+              <span style={{fontFamily:"var(--fm)",fontSize:12,color:"var(--t4)"}}>vs</span>
+              <span style={{fontWeight:900,fontSize:18,letterSpacing:1,textTransform:"uppercase",color:"var(--navy)"}}>({g.seed2}) {g.team2}</span>
+              <Logo name={g.team2} size={32}/>
+            </div>
+            {/* Editable spread and total — big, clear, high contrast */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+              <div>
+                <label style={{fontFamily:"var(--fm)",fontSize:10,fontWeight:700,color:"var(--navy)",letterSpacing:1.5,display:"block",marginBottom:4}}>SPREAD</label>
+                <input className="inp" style={{fontSize:16,fontWeight:700,fontFamily:"var(--fm)",color:"var(--navy)",textAlign:"center",padding:"12px",background:"var(--bg3)"}}
+                  value={g.spread||""} onChange={e=>updateGameLine(g.id,"spread",e.target.value)}
+                  onBlur={()=>saveGameLine(g.id,"spread")}
+                  placeholder="e.g. -3.5"/>
+              </div>
+              <div>
+                <label style={{fontFamily:"var(--fm)",fontSize:10,fontWeight:700,color:"var(--navy)",letterSpacing:1.5,display:"block",marginBottom:4}}>TOTAL (O/U)</label>
+                <input className="inp" style={{fontSize:16,fontWeight:700,fontFamily:"var(--fm)",color:"var(--navy)",textAlign:"center",padding:"12px",background:"var(--bg3)"}}
+                  value={g.total||""} onChange={e=>updateGameLine(g.id,"total",e.target.value)}
+                  onBlur={()=>saveGameLine(g.id,"total")}
+                  placeholder="e.g. 142.5"/>
+              </div>
+            </div>
+            {/* Grading */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
               {[{k:"team1",l:`${g.team1} covers`},{k:"over",l:"Over hits"}].map(({k,l})=>
-                <div key={k} style={{fontSize:10,fontFamily:"var(--fm)"}}><div style={{color:"var(--t5)",marginBottom:4}}>{l}</div>
-                <select className="gs" value={res[g.id]?.[k]||""} onChange={e=>grade(g.id,k,e.target.value)}>
-                  <option value="">–</option><option value="win">Win</option><option value="loss">Loss</option><option value="push">Push</option></select></div>)}
-            </div></div>})}
+                <div key={k}>
+                  <div style={{fontFamily:"var(--fm)",fontSize:11,fontWeight:600,color:"var(--t3)",marginBottom:4}}>{l}</div>
+                  <select className="gs" style={{fontSize:13,padding:"8px 10px"}} value={res[g.id]?.[k]||""} onChange={e=>grade(g.id,k,e.target.value)}>
+                    <option value="">— Not graded —</option><option value="win">WIN</option><option value="loss">LOSS</option><option value="push">PUSH</option></select>
+                </div>)}
+            </div>
+          </div>})}
       </div>
     </>}
 
