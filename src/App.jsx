@@ -398,6 +398,8 @@ select.inp{cursor:pointer;appearance:none;background-image:url("data:image/svg+x
   .ng{grid-template-columns:1fr}.cf2{grid-template-columns:1fr}.gm-t{font-size:13px}
   .cd-bar{padding:8px 14px;top:44px}.cd-round{font-size:10px}
   .stabs{flex-wrap:wrap}.stab{font-size:9px;padding:6px 8px}
+  .lr-left{grid-template-columns:22px 1fr 34px 50px !important}
+  .lh-cell{font-size:8px !important}
 }
 `;
 
@@ -582,11 +584,16 @@ function MakePicks({user,games,userPicks,setUserPicks,showToast}){
         {done&&<span style={{fontFamily:"var(--fm)",fontSize:11,color:"var(--g)",fontWeight:600}}>FINALIZED</span>}
       </div>
       <div className="prog"><div className={cn("prog-fill",done?"full":"part")} style={{width:`${(pc/round.requiredPicks)*100}%`}}/></div>
-      {!done&&pc>0&&rGames.length>0&&<div className="not-sub-banner">You have {pc} pick{pc>1?"s":""} selected but need {round.requiredPicks} to finalize. You can pick a team AND an over/under on the same game — each counts as 1 pick.</div>}
-      {!done&&pc===0&&rGames.length>0&&<div className="not-sub-banner">Select {round.requiredPicks} picks to finalize. You can pick a team AND an over/under on the same game — each counts as 1 pick.</div>}
+      {!done&&pc>0&&rGames.length>0&&<div className="not-sub-banner">You have {pc} of {round.requiredPicks} picks selected. Each spread or over/under pick counts as 1. You can pick both on the same game.</div>}
+      {!done&&pc===0&&rGames.length>0&&<div className="not-sub-banner">Select {round.requiredPicks} total picks to finalize. Each spread or over/under counts as 1 pick — you can pick both on the same game.</div>}
     </>}
     {rGames.length===0?<div className="ey"><p>No games posted for this round yet.<br/>The commissioner will add games before the round begins.</p></div>:
-    rGames.map(g=>{
+    (()=>{
+      const openGames=rGames.filter(g=>!isGameTipped(g));
+      const tippedGames=rGames.filter(g=>isGameTipped(g));
+      return <>{openGames.length>0&&<>
+        {tippedGames.length>0&&<div style={{fontFamily:"var(--fm)",fontSize:10,fontWeight:700,letterSpacing:1.5,color:"var(--g)",textTransform:"uppercase",margin:"16px 0 8px",padding:"6px 0",borderBottom:"1px solid var(--bdr)"}}>OPEN — PICK BEFORE TIP-OFF</div>}
+        {openGames.map(g=>{
       const ats=getAts(picks,g.id), ou=getOu(picks,g.id);
       const hasPick=ats||ou;
       const tipped=isGameTipped(g);
@@ -622,44 +629,100 @@ function MakePicks({user,games,userPicks,setUserPicks,showToast}){
           <button className={cn("pk",ou==="under"&&"on")} onClick={()=>toggleOu(g.id,g,"under")} disabled={tipped||(!canPickOu&&ou!=="under")}>Under {g.total||""}</button>
         </div>
         {atMax&&!ats&&!ou&&!tipped&&<div className="pk-full">All {round.requiredPicks} picks used — deselect one to pick this game</div>}
+      </div>})}
+      </>}
+      {tippedGames.length>0&&<>
+        <div style={{fontFamily:"var(--fm)",fontSize:10,fontWeight:700,letterSpacing:1.5,color:"var(--t4)",textTransform:"uppercase",margin:"20px 0 8px",padding:"6px 0",borderBottom:"1px solid var(--bdr)"}}>LOCKED — GAME{tippedGames.length>1?"S":""} TIPPED OFF ({tippedGames.length})</div>
+        {tippedGames.map(g=>{
+      const ats=getAts(picks,g.id), ou=getOu(picks,g.id);
+      const hasPick=ats||ou;
+      return (
+      <div key={g.id} className="gm lk">
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <div style={{fontFamily:"var(--fm)",fontSize:10,color:"var(--red)"}}>{fmtTime(g.tipTime)}</div>
+          <span className="bdg bdg-r" style={{fontSize:9}}>LOCKED</span>
+        </div>
+        <div className="gm-mu"><div className="gm-ts">
+          <div className="gm-t away"><span className="gm-sd">{parseInt(g.seed1)||99>parseInt(g.seed2)||99?g.seed1:g.seed2}</span><Logo name={parseInt(g.seed1)||99>parseInt(g.seed2)||99?g.team1:g.team2} size={28}/><span>{parseInt(g.seed1)||99>parseInt(g.seed2)||99?g.team1:g.team2}</span></div>
+          <div className="gm-t"><span className="gm-sd">{parseInt(g.seed1)||99>parseInt(g.seed2)||99?g.seed2:g.seed1}</span><Logo name={parseInt(g.seed1)||99>parseInt(g.seed2)||99?g.team2:g.team1} size={28}/><span>{parseInt(g.seed1)||99>parseInt(g.seed2)||99?g.team2:g.team1}</span></div>
+        </div></div>
+        {hasPick&&<div style={{fontFamily:"var(--fm)",fontSize:10,color:"var(--t3)",padding:"6px 10px",background:"var(--bg3)",borderRadius:4}}>
+          {ats&&<span>SPREAD: {ats==="team1"?g.team1:g.team2} {ats==="team1"?g.spread||"PK":spread2(g.spread)}</span>}
+          {ats&&ou&&<span> &middot; </span>}
+          {ou&&<span>TOTAL: {ou==="over"?"Over":"Under"} {g.total||""}</span>}
+        </div>}
+        {!hasPick&&<div style={{fontFamily:"var(--fm)",fontSize:10,color:"var(--red)",padding:"6px 10px",background:"var(--rg)",borderRadius:4}}>No pick submitted</div>}
       </div>)})}
+      </>}
+      </>})()}
   </div>);
 }
 
 // ─── View Picks (The Board) ──────────────────────────────────────────────────
 function ViewPicks({allPicks,users,games,allResults}){
   const[sr,setSr]=useState(()=>{const m=getMostRecentLockedRound(games);return m?m.id:ROUNDS[0].id});
-  const[sp,setSp]=useState(null);const roundLocked=isRoundFullyLocked(sr,games);const rGames=(games||[]).filter(g=>g.roundId===sr).sort((a,b)=>{if(!a.tipTime)return 1;if(!b.tipTime)return -1;return new Date(a.tipTime)-new Date(b.tipTime)});const results=allResults[sr]||{};
+  const rGames=(games||[]).filter(g=>g.roundId===sr).sort((a,b)=>{if(!a.tipTime)return 1;if(!b.tipTime)return -1;return new Date(a.tipTime)-new Date(b.tipTime)});
   const players=Object.entries(users).filter(([u])=>u!==COMMISSIONER_USER);
-  return(<div className="an"><div className="st">THE BOARD — PLAYER PICKS</div>
-    <div className="fld"><label className="lbl">Round</label><select className="inp" value={sr} onChange={e=>{setSr(e.target.value);setSp(null)}}>
+  // Only show tipped games on the board
+  const tippedGames=rGames.filter(g=>isGameTipped(g));
+  const hiddenGames=rGames.filter(g=>!isGameTipped(g));
+
+  return (<div className="an"><div className="st">THE BOARD</div>
+    <div className="fld"><label className="lbl">Round</label><select className="inp" value={sr} onChange={e=>setSr(e.target.value)}>
       {ROUNDS.map(r=><option key={r.id} value={r.id}>{r.name} {isRoundPartiallyLocked(r.id,games)?"(viewable)":"(hidden until tip)"}</option>)}
     </select></div>
-    {!isRoundPartiallyLocked(sr,games)?<div className="ey"><p>Picks are hidden until games tip off.<br/>First tip: {getFirstTipInRound(sr,games)?fmtTime(getFirstTipInRound(sr,games)):"TBD"}</p></div>:<>
-      <div style={{marginBottom:14}}><label className="lbl">Player</label><div>{players.map(([un,ud])=>{
-        const hasPicks=countPicks(migratePicks((allPicks[un]||{})[sr]||{}))>0;
-        return <button key={un} className={cn("chp",sp===un&&"on")} onClick={()=>setSp(un)} style={!hasPicks?{opacity:.5}:{}}>{getUserDisplay(ud)} {!hasPicks?"(none)":""}</button>
-      })}</div></div>
-      {sp?<div className="crd"><div className="crd-t">{getUserDisplay(users[sp])}</div>
-        {(()=>{const allPlayerPicks=migratePicks((allPicks[sp]||{})[sr]||{});
-        // Only show picks for games that have tipped
-        const visiblePicks=Object.entries(allPlayerPicks).filter(([pickKey])=>{
-          const gid=pickGameId(pickKey);
-          const gm=rGames.find(g=>g.id===gid);
-          return gm&&isGameTipped(gm);
-        });
-        const hiddenCount=countPicks(allPlayerPicks)-visiblePicks.length;
-        if(!visiblePicks.length&&!hiddenCount)return <div style={{color:"var(--t4)",fontSize:12,fontFamily:"var(--fm)"}}>No picks submitted for this round.</div>;
-        return <>{visiblePicks.map(([pickKey,pickVal])=>{const gid=pickGameId(pickKey);const gm=rGames.find(g=>g.id===gid);const st=getPickResult(allResults,sr,pickKey,pickVal);const status=st||"pending";
-        const pl=pickVal==="team1"?`${gm?.team1||"?"} ${gm?.spread||"PK"}`:pickVal==="team2"?`${gm?.team2||"?"} ${spread2(gm?.spread)}`:pickVal==="over"?`Over ${gm?.total||""}`:`Under ${gm?.total||""}`;
-        const typeLabel=pickType(pickKey)==="ats"?"ATS":"O/U";
-        return <div key={pickKey} className="hi"><div><div style={{fontFamily:"var(--fm)",fontSize:9,color:"var(--t5)"}}>{gm?`${gm.team1} vs ${gm.team2}`:gid} <span style={{color:"var(--navy)"}}>{typeLabel}</span></div>
-        <div style={{fontSize:13,marginTop:3,display:"flex",alignItems:"center",gap:7}}><Logo name={pickVal==="team1"?gm?.team1:pickVal==="team2"?gm?.team2:gm?.team1} size={18}/>{pl}</div></div>
-        <span className={cn("rb",status==="win"?"rw":status==="loss"?"rl":status==="push"?"rp":"rq")}>{status==="win"?"WIN":status==="loss"?"LOSS":status==="push"?"PUSH":"PENDING"}</span></div>})}
-        {hiddenCount>0&&<div style={{padding:"10px 0",fontFamily:"var(--fm)",fontSize:11,color:"var(--t4)",textAlign:"center",borderTop:"1px solid var(--bdr)",marginTop:8}}>{hiddenCount} pick{hiddenCount>1?"s":""} hidden until game{hiddenCount>1?"s":""} tip{hiddenCount===1?"s":""} off</div>}
-        </>})()}
-      </div>:<div style={{color:"var(--t5)",fontSize:12,textAlign:"center",padding:24,fontFamily:"var(--fm)"}}>Select a player to view their picks</div>}
-    </>}
+    {!isRoundPartiallyLocked(sr,games)?<div className="ey"><p>Picks are hidden until games tip off.<br/>First tip: {getFirstTipInRound(sr,games)?fmtTime(getFirstTipInRound(sr,games)):"TBD"}</p></div>:
+    tippedGames.length===0?<div className="ey"><p>No games have tipped yet in this round.</p></div>:
+    <div className="crd" style={{padding:0,overflow:"hidden"}}>
+      <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+        <table style={{borderCollapse:"collapse",width:"100%",minWidth:tippedGames.length*70+140}}>
+          <thead>
+            <tr style={{borderBottom:"2px solid var(--bdr)"}}>
+              <th style={{position:"sticky",left:0,background:"var(--bg)",zIndex:2,padding:"10px 12px",textAlign:"left",fontFamily:"var(--fm)",fontSize:9,color:"var(--t4)",letterSpacing:1.5,fontWeight:700,borderRight:"2px solid var(--bdr)",minWidth:140}}>PLAYER</th>
+              {tippedGames.map(g=>{
+                const s1=parseInt(g.seed1)||99,s2=parseInt(g.seed2)||99;
+                return <th key={g.id} style={{padding:"8px 4px",textAlign:"center",borderRight:"1px solid var(--bdr)",minWidth:60}}>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                    <Logo name={s1<s2?g.team1:g.team2} size={18}/>
+                    <div style={{fontFamily:"var(--fm)",fontSize:7,color:"var(--t5)",letterSpacing:.5}}>vs</div>
+                    <Logo name={s1<s2?g.team2:g.team1} size={18}/>
+                  </div>
+                </th>})}
+            </tr>
+          </thead>
+          <tbody>
+            {players.map(([un,ud])=>{
+              const playerPicks=migratePicks((allPicks[un]||{})[sr]||{});
+              return <tr key={un} style={{borderBottom:"1px solid var(--bdr)"}}>
+                <td style={{position:"sticky",left:0,background:"var(--bg)",zIndex:1,padding:"8px 12px",fontWeight:600,fontSize:11,color:"var(--t2)",borderRight:"2px solid var(--bdr)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:140}}>{getUserDisplay(ud)}</td>
+                {tippedGames.map(g=>{
+                  const ats=getAts(playerPicks,g.id);
+                  const ou=getOu(playerPicks,g.id);
+                  const atsResult=ats?getPickResult(allResults,sr,`${g.id}_ats`,ats):null;
+                  const ouResult=ou?getPickResult(allResults,sr,`${g.id}_ou`,ou):null;
+                  const atsTeamName=ats==="team1"?g.team1:ats==="team2"?g.team2:null;
+                  return <td key={g.id} style={{padding:"6px 4px",textAlign:"center",borderRight:"1px solid var(--bdr)",verticalAlign:"middle"}}>
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                      {ats&&<div style={{display:"flex",alignItems:"center",gap:2,padding:"2px 4px",borderRadius:3,
+                        background:atsResult==="win"?"var(--gg)":atsResult==="loss"?"var(--rg)":atsResult==="push"?"var(--yg)":"var(--bg3)"}}>
+                        <Logo name={atsTeamName} size={16}/>
+                      </div>}
+                      {ou&&<div style={{fontFamily:"var(--fm)",fontSize:10,fontWeight:700,padding:"2px 4px",borderRadius:3,
+                        color:ou==="over"?"var(--g)":"var(--red)",
+                        background:ouResult==="win"?"var(--gg)":ouResult==="loss"?"var(--rg)":ouResult==="push"?"var(--yg)":"var(--bg3)"}}>
+                        {ou==="over"?"\u2191":"\u2193"}
+                      </div>}
+                      {!ats&&!ou&&<span style={{color:"var(--t5)",fontSize:9}}>—</span>}
+                    </div>
+                  </td>})}
+              </tr>})}
+          </tbody>
+        </table>
+      </div>
+      {hiddenGames.length>0&&<div style={{padding:"10px 16px",fontFamily:"var(--fm)",fontSize:10,color:"var(--t4)",textAlign:"center",borderTop:"2px solid var(--bdr)",background:"var(--bg3)"}}>
+        {hiddenGames.length} game{hiddenGames.length>1?"s":""} hidden until tip-off
+      </div>}
+    </div>}
   </div>);
 }
 
@@ -772,7 +835,8 @@ function History({user,games,userPicks,allResults}){
       const roundLocked=isRoundFullyLocked(round.id,games),hasGames=rg.length>0,pc=countPicks(picks),hasPicks=pc>0;
       const missed=roundLocked&&hasGames&&!hasPicks;
       const incomplete=roundLocked&&hasGames&&hasPicks&&pc<round.requiredPicks;
-      if(!roundLocked&&!hasPicks) return null;
+      if(!hasGames&&!hasPicks) return null;
+      if(hasGames&&!hasPicks&&!roundLocked) return null;
       let rw=0,rl=0,rp=0;Object.entries(picks).forEach(([pickKey,pickVal])=>{const r=getPickResult(allResults,round.id,pickKey,pickVal);if(r==="win")rw++;else if(r==="loss")rl++;else if(r==="push")rp++});
       return <div key={round.id} className="crd" style={{marginBottom:14}}>
         <div className="crd-t">{round.name}
@@ -788,7 +852,7 @@ function History({user,games,userPicks,allResults}){
         <div style={{fontSize:13,marginTop:3,display:"flex",alignItems:"center",gap:7}}><Logo name={pickVal==="team1"?gm?.team1:pickVal==="team2"?gm?.team2:gm?.team1} size={18}/>{pl}</div></div>
         <span className={cn("rb",st==="win"?"rw":st==="loss"?"rl":st==="push"?"rp":"rq")}>{st==="win"?"WIN":st==="loss"?"LOSS":st==="push"?"PUSH":"PENDING"}</span></div>})}
       </div>}).filter(Boolean)}
-    {ROUNDS.every(r=>!isRoundFullyLocked(r.id,games))&&Object.values(userPicks||{}).every(r=>!Object.keys(r).length)&&<div className="ey"><p>No picks yet. Head to Make Picks to get started.</p></div>}
+    {ROUNDS.every(r=>{const rg=(games||[]).filter(g=>g.roundId===r.id);return !rg.length})&&Object.values(userPicks||{}).every(r=>!countPicks(migratePicks(r)))&&<div className="ey"><p>No picks yet. Head to Picks to get started.</p></div>}
   </div>);
 }
 
@@ -1073,6 +1137,7 @@ export default function App(){
   const[toast,setToast]=useState(null);
   const isCom=user===COMMISSIONER_USER;
   const showToast=msg=>setToast(msg);
+  const lastRefresh=useRef(0);
 
   // Restore session on mount
   useEffect(()=>{const s=loadSession();if(s){setUser(s.user);setUserData(s.userData)}},[]);
@@ -1127,7 +1192,9 @@ export default function App(){
       <button className="btn-out" onClick={handleLogout}>OUT</button></div>
     </header>
     {!isCom&&<CountdownBar userPicks={userPicks} games={games}/>}
-    <nav className="nav">{tabs.map(t=><button key={t.id} className={cn("nt",activeTab===t.id&&"on")} onClick={()=>setTab(t.id)}>{t.label}</button>)}</nav>
+    <nav className="nav">{tabs.map(t=><button key={t.id} className={cn("nt",activeTab===t.id&&"on")} onClick={()=>setTab(t.id)}>{t.label}</button>)}
+      <button className="nt" onClick={()=>{if(Date.now()-lastRefresh.current<10000)return;lastRefresh.current=Date.now();loadData();showToast("Refreshed")}} style={{marginLeft:"auto",color:"var(--t5)",fontSize:10}} title="Refresh data">{"\u21BB"}</button>
+    </nav>
     <div className="main">{!loaded?<div className="ey ld">Loading pool data...</div>:<>
       {activeTab==="picks"&&!isCom&&<MakePicks user={user} games={games} userPicks={userPicks} setUserPicks={p=>{setUserPicks(p);setAllPicks({...allPicks,[user]:p})}} showToast={showToast}/>}
       {activeTab==="standings"&&<Standings allPicks={allPicks} allResults={allResults} users={users} games={games}/>}
