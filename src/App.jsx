@@ -673,17 +673,17 @@ function ViewPicks({allPicks,users,games,allResults}){
     tippedGames.length===0?<div className="ey"><p>No games have tipped yet in this round.</p></div>:
     <div className="crd" style={{padding:0,overflow:"hidden"}}>
       <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-        <table style={{borderCollapse:"collapse",width:"100%",minWidth:tippedGames.length*70+140}}>
+        <table style={{borderCollapse:"collapse",width:"100%",minWidth:tippedGames.length*52+160}}>
           <thead>
             <tr style={{borderBottom:"2px solid var(--bdr)"}}>
-              <th style={{position:"sticky",left:0,background:"var(--bg)",zIndex:2,padding:"10px 12px",textAlign:"left",fontFamily:"var(--fm)",fontSize:9,color:"var(--t4)",letterSpacing:1.5,fontWeight:700,borderRight:"2px solid var(--bdr)",minWidth:140}}>PLAYER</th>
+              <th style={{position:"sticky",left:0,background:"var(--bg)",zIndex:2,padding:"10px 12px",textAlign:"left",fontFamily:"var(--fm)",fontSize:9,color:"var(--t4)",letterSpacing:1.5,fontWeight:700,borderRight:"2px solid var(--bdr)",minWidth:160}}>PLAYER</th>
               {tippedGames.map(g=>{
                 const s1=parseInt(g.seed1)||99,s2=parseInt(g.seed2)||99;
-                return <th key={g.id} style={{padding:"8px 4px",textAlign:"center",borderRight:"1px solid var(--bdr)",minWidth:60}}>
-                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                    <Logo name={s1<s2?g.team1:g.team2} size={18}/>
-                    <div style={{fontFamily:"var(--fm)",fontSize:7,color:"var(--t5)",letterSpacing:.5}}>vs</div>
-                    <Logo name={s1<s2?g.team2:g.team1} size={18}/>
+                return <th key={g.id} style={{padding:"6px 2px",textAlign:"center",borderRight:"1px solid var(--bdr)",width:48}}>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1}}>
+                    <Logo name={s1<s2?g.team1:g.team2} size={24}/>
+                    <div style={{fontFamily:"var(--fm)",fontSize:6,color:"var(--t5)"}}>vs</div>
+                    <Logo name={s1<s2?g.team2:g.team1} size={24}/>
                   </div>
                 </th>})}
             </tr>
@@ -692,25 +692,27 @@ function ViewPicks({allPicks,users,games,allResults}){
             {players.map(([un,ud])=>{
               const playerPicks=migratePicks((allPicks[un]||{})[sr]||{});
               return <tr key={un} style={{borderBottom:"1px solid var(--bdr)"}}>
-                <td style={{position:"sticky",left:0,background:"var(--bg)",zIndex:1,padding:"8px 12px",fontWeight:600,fontSize:11,color:"var(--t2)",borderRight:"2px solid var(--bdr)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:140}}>{getUserDisplay(ud)}</td>
+                <td style={{position:"sticky",left:0,background:"var(--bg)",zIndex:1,padding:"8px 12px",fontWeight:600,fontSize:11,color:"var(--t2)",borderRight:"2px solid var(--bdr)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:160}}>{getUserDisplay(ud)}</td>
                 {tippedGames.map(g=>{
                   const ats=getAts(playerPicks,g.id);
                   const ou=getOu(playerPicks,g.id);
                   const atsResult=ats?getPickResult(allResults,sr,`${g.id}_ats`,ats):null;
                   const ouResult=ou?getPickResult(allResults,sr,`${g.id}_ou`,ou):null;
                   const atsTeamName=ats==="team1"?g.team1:ats==="team2"?g.team2:null;
-                  return <td key={g.id} style={{padding:"6px 4px",textAlign:"center",borderRight:"1px solid var(--bdr)",verticalAlign:"middle"}}>
-                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
-                      {ats&&<div style={{display:"flex",alignItems:"center",gap:2,padding:"2px 4px",borderRadius:3,
-                        background:atsResult==="win"?"var(--gg)":atsResult==="loss"?"var(--rg)":atsResult==="push"?"var(--yg)":"var(--bg3)"}}>
-                        <Logo name={atsTeamName} size={16}/>
+                  return <td key={g.id} style={{padding:"4px 2px",textAlign:"center",borderRight:"1px solid var(--bdr)",verticalAlign:"middle"}}>
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                      {ats&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",width:36,height:36,borderRadius:6,
+                        background:atsResult==="win"?"rgba(22,163,74,0.2)":atsResult==="loss"?"rgba(220,38,38,0.15)":atsResult==="push"?"rgba(202,138,4,0.15)":"var(--bg3)",
+                        border:atsResult==="win"?"2px solid var(--g)":atsResult==="loss"?"2px solid var(--red)":atsResult==="push"?"2px solid var(--ylw)":"1px solid var(--bdr)"}}>
+                        <Logo name={atsTeamName} size={24}/>
                       </div>}
-                      {ou&&<div style={{fontFamily:"var(--fm)",fontSize:10,fontWeight:700,padding:"2px 4px",borderRadius:3,
-                        color:ou==="over"?"var(--g)":"var(--red)",
-                        background:ouResult==="win"?"var(--gg)":ouResult==="loss"?"var(--rg)":ouResult==="push"?"var(--yg)":"var(--bg3)"}}>
+                      {ou&&<div style={{fontFamily:"var(--fm)",fontSize:14,fontWeight:800,width:36,height:24,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:4,
+                        color:ou==="over"?"#fff":"#fff",
+                        background:ouResult==="win"?(ou==="over"?"var(--g)":"var(--g)"):ouResult==="loss"?"var(--red)":ouResult==="push"?"var(--ylw)":(ou==="over"?"var(--g)":"var(--red)"),
+                        opacity:ouResult?"1":"0.4"}}>
                         {ou==="over"?"\u2191":"\u2193"}
                       </div>}
-                      {!ats&&!ou&&<span style={{color:"var(--t5)",fontSize:9}}>—</span>}
+                      {!ats&&!ou&&<span style={{color:"var(--t5)",fontSize:10}}>—</span>}
                     </div>
                   </td>})}
               </tr>})}
