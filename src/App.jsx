@@ -840,7 +840,15 @@ function Commish({games,setGames,allResults,setAllResults,allPicks,setAllPicks,u
     setSaving(false);
     showToast("Line updated")};
 
-  return(<div className="an"><div className="st">COMMISSIONER PANEL</div>
+  const togglePaid=async(un)=>{
+    const freshUsers=(await S.getShared("pool:users"))||{};
+    if(!freshUsers[un])return;
+    freshUsers[un].paid=!freshUsers[un].paid;
+    await S.setShared("pool:users",freshUsers);
+    setUsers(freshUsers);
+    showToast(freshUsers[un].paid?"Marked as paid":"Marked as unpaid")};
+
+  return (<div className="an"><div className="st">COMMISSIONER PANEL</div>
     <div className="stabs">
       <button className={cn("stab",subTab==="games"&&"on")} onClick={()=>setSubTab("games")}>GAMES</button>
       <button className={cn("stab",subTab==="users"&&"on")} onClick={()=>setSubTab("users")}>USERS</button>
@@ -922,10 +930,25 @@ function Commish({games,setGames,allResults,setAllResults,allPicks,setAllPicks,u
       </div>
     </>}
 
-    {subTab==="users"&&<div className="crd"><div className="crd-t">MANAGE USERS <span className="bdg bdg-navy">{players.length} PLAYERS</span></div>
+    {subTab==="users"&&<div className="crd">
+      {(()=>{const paidCount=players.filter(([un,ud])=>ud.paid).length;const unpaidCount=players.length-paidCount;
+        return <div className="crd-t">MANAGE USERS <span className="bdg bdg-navy">{players.length} PLAYERS</span>
+          <span className="bdg bdg-g">{paidCount} PAID</span>
+          {unpaidCount>0&&<span className="bdg bdg-r">{unpaidCount} UNPAID</span>}
+        </div>})()}
       {players.length===0?<div className="ey"><p>No players registered yet.</p></div>:
-      players.map(([un,ud])=>{const up=allPicks[un]||{};const sub=ROUNDS.filter(r=>Object.keys(up[r.id]||{}).length===r.requiredPicks).length;
-        return <div key={un} className="um-row"><div className="um-name">{getUserDisplay(ud)}</div><div className="um-info">{sub}/{ROUNDS.length} rounds</div><div className="um-info">Joined {new Date(ud.joined).toLocaleDateString()}</div><button className="btn btn-d btn-sm" onClick={()=>removeUser(un)}>REMOVE</button></div>})}
+      players.map(([un,ud])=>{const up=allPicks[un]||{};const sub=ROUNDS.filter(r=>countPicks(migratePicks(up[r.id]||{}))===r.requiredPicks).length;
+        return <div key={un} className="um-row">
+          <div style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",flex:"0 0 auto"}} onClick={()=>togglePaid(un)}>
+            <div style={{width:22,height:22,borderRadius:4,border:ud.paid?"2px solid var(--g)":"2px solid var(--bdr2)",background:ud.paid?"var(--gg)":"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"var(--g)",fontWeight:800,transition:"all .15s"}}>
+              {ud.paid?"\u2713":""}
+            </div>
+          </div>
+          <div className="um-name">{getUserDisplay(ud)}</div>
+          <div className="um-info">{ud.paid?<span style={{color:"var(--g)",fontWeight:700}}>PAID</span>:<span style={{color:"var(--red)",fontWeight:700}}>UNPAID</span>}</div>
+          <div className="um-info">{sub}/{ROUNDS.length} rds</div>
+          <button className="btn btn-d btn-sm" onClick={()=>removeUser(un)}>REMOVE</button>
+        </div>})}
     </div>}
 
     {subTab==="editpicks"&&<>
