@@ -760,11 +760,22 @@ function Commish({games,setGames,allResults,setAllResults,allPicks,setAllPicks,u
     setGames(up);setSaving(false);showToast("Game removed")};
   const grade=async(gid,key,val)=>{
     const freshResults=(await S.getShared("pool:results"))||{};
-    const rr={...(freshResults[sr]||{})};if(!rr[gid])rr[gid]={};rr[gid][key]=val;
-    if(key==="team1")rr[gid]["team2"]=val==="win"?"loss":val==="loss"?"win":"push";
-    else if(key==="team2")rr[gid]["team1"]=val==="win"?"loss":val==="loss"?"win":"push";
-    else if(key==="over")rr[gid]["under"]=val==="win"?"loss":val==="loss"?"win":"push";
-    else if(key==="under")rr[gid]["over"]=val==="win"?"loss":val==="loss"?"win":"push";
+    const rr={...(freshResults[sr]||{})};if(!rr[gid])rr[gid]={};
+    if(!val||val===""){
+      // Clearing the grade — remove both sides
+      if(key==="team1"){delete rr[gid]["team1"];delete rr[gid]["team2"]}
+      else if(key==="team2"){delete rr[gid]["team1"];delete rr[gid]["team2"]}
+      else if(key==="over"){delete rr[gid]["over"];delete rr[gid]["under"]}
+      else if(key==="under"){delete rr[gid]["over"];delete rr[gid]["under"]}
+      // If game has no results left, clean it up
+      if(Object.keys(rr[gid]).length===0)delete rr[gid];
+    }else{
+      rr[gid][key]=val;
+      if(key==="team1")rr[gid]["team2"]=val==="win"?"loss":val==="loss"?"win":"push";
+      else if(key==="team2")rr[gid]["team1"]=val==="win"?"loss":val==="loss"?"win":"push";
+      else if(key==="over")rr[gid]["under"]=val==="win"?"loss":val==="loss"?"win":"push";
+      else if(key==="under")rr[gid]["over"]=val==="win"?"loss":val==="loss"?"win":"push";
+    }
     const up={...freshResults,[sr]:rr};
     await S.setShared("pool:results",up);
     setAllResults(up)};
