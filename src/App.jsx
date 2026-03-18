@@ -93,6 +93,55 @@ function getUserDisplay(u){if(!u)return"Unknown";return`${u.username||""} (${u.f
 function cn(...a){return a.filter(Boolean).join(" ")}
 function spread2(s){if(!s)return"PK";const n=parseFloat(s);if(isNaN(n))return"PK";return n>0?`−${Math.abs(n)}`:`+${Math.abs(n)}`}
 
+// ─── Pick format helpers ─────────────────────────────────────────────────────
+// New format: keys are "gameId_ats" or "gameId_ou", values are team1/team2 or over/under
+// Old format: keys are bare "gameId", values are team1/team2/over/under
+// Migration converts old → new automatically
+
+function migratePicks(roundPicks){
+  if(!roundPicks||typeof roundPicks!=="object")return{};
+  const migrated={};let needsMigration=false;
+  Object.entries(roundPicks).forEach(([key,val])=>{
+    if(key.endsWith("_ats")||key.endsWith("_ou")){
+      migrated[key]=val; // already new format
+    }else{
+      needsMigration=true;
+      // Old format — determine if ATS or OU based on value
+      if(val==="over"||val==="under") migrated[`${key}_ou`]=val;
+      else migrated[`${key}_ats`]=val;
+    }
+  });
+  return migrated;
+}
+
+function migrateAllRounds(userPicks){
+  if(!userPicks)return{};
+  const migrated={};
+  Object.entries(userPicks).forEach(([roundId,roundPicks])=>{
+    migrated[roundId]=migratePicks(roundPicks);
+  });
+  return migrated;
+}
+
+// Extract real game ID from pick key (strip _ats or _ou suffix)
+function pickGameId(pickKey){return pickKey.replace(/_ats$/,"").replace(/_ou$/,"")}
+// Get pick type from key
+function pickType(pickKey){if(pickKey.endsWith("_ats"))return"ats";if(pickKey.endsWith("_ou"))return"ou";return"unknown"}
+// Count picks in a round (each _ats and _ou entry counts as 1)
+function countPicks(roundPicks){return Object.keys(roundPicks||{}).length}
+// Get ATS pick for a game
+function getAts(roundPicks,gameId){return (roundPicks||{})[`${gameId}_ats`]||null}
+// Get OU pick for a game
+function getOu(roundPicks,gameId){return (roundPicks||{})[`${gameId}_ou`]||null}
+// Get result for a pick
+function getPickResult(allResults,roundId,pickKey,pickVal){
+  const gid=pickGameId(pickKey);
+  const rr=(allResults||{})[roundId]||{};
+  const gameRes=rr[gid];
+  if(!gameRes)return null;
+  return gameRes[pickVal]||null;
+}
+
 function Logo({name,size=36}){
   const[err,setErr]=useState(false);const src=teamLogoSrc(name);
   if(!src||err) return <div style={{width:size,height:size,borderRadius:"50%",background:"#e2e8f0",display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*.4,fontWeight:800,color:"#64748b",flexShrink:0,fontFamily:"var(--fd)"}}>{(name||"?").charAt(0).toUpperCase()}</div>;
@@ -407,7 +456,7 @@ function CountdownBar({userPicks,games}){
   useEffect(()=>{const i=setInterval(()=>setT(t=>t+1),1000);return()=>clearInterval(i)},[]);
   const next=getNextUnlocked();
   if(!next) return <div className="cd-bar"><div className="cd-left"><span className="cd-round">ALL ROUNDS LOCKED</span></div><div className="cd-locked">TOURNAMENT COMPLETE</div></div>;
-  const cd=countdown(next.id),picks=(userPicks||{})[next.id]||{},submitted=Object.keys(picks).length,needed=next.requiredPicks,done=submitted>=needed;
+  const cd=countdown(next.id),picks=migratePicks((userPicks||{})[next.id]||{}),submitted=countPicks(picks),needed=next.requiredPicks,done=submitted>=needed;
   const hasGames=(games||[]).some(g=>g.roundId===next.id);
   return(
     <div className={cn("cd-bar",cd.urgent&&"urg",!cd.urgent&&cd.warning&&"warn",done&&"cd-done-bar",!done&&hasGames&&"cd-notdone-bar")}>
@@ -430,43 +479,56 @@ function CountdownBar({userPicks,games}){
 // ─── Make Picks ──────────────────────────────────────────────────────────────
 function MakePicks({user,games,userPicks,setUserPicks,showToast}){
   const[sr,setSr]=useState(()=>{const n=getNextUnlocked();return n?n.id:ROUNDS[0].id});
-  const round=ROUNDS.find(r=>r.id===sr),rGames=(games||[]).filter(g=>g.roundId===sr),locked=isLocked(sr),picks=userPicks[sr]||{},pc=Object.keys(picks).length,done=pc===round.requiredPicks;
+  const round=ROUNDS.find(r=>r.id===sr),rGames=(games||[]).filter(g=>g.roundId===sr),locked=isLocked(sr);
+  const picks=migratePicks(userPicks[sr]||{});
+  const pc=countPicks(picks),done=pc===round.requiredPicks;
   const atMax=pc>=round.requiredPicks;
   const savingRef=useRef(false);
 
-  const toggle=async(gid,val)=>{
+  const toggleAts=async(gid,val)=>{
     if(locked||savingRef.current)return;
     savingRef.current=true;
-    // Read fresh picks from storage to avoid overwriting
     const freshPicks=(await S.getShared(`picks:${user}`))||{};
-    const cur={...(freshPicks[sr]||{})};
-    if(cur[gid]===val){delete cur[gid]}
+    const cur=migratePicks(freshPicks[sr]||{});
+    const key=`${gid}_ats`;
+    if(cur[key]===val){delete cur[key]}
     else{
-      if(Object.keys(cur).length>=round.requiredPicks&&!cur[gid]){savingRef.current=false;return}
-      cur[gid]=val;
+      if(countPicks(cur)>=round.requiredPicks&&!cur[key]){savingRef.current=false;return}
+      cur[key]=val;
     }
     const up={...freshPicks,[sr]:cur};
-    await S.setShared(`picks:${user}`,up);
-    setUserPicks(up);
-    savingRef.current=false;
-    const newCount=Object.keys(up[sr]||{}).length;
-    if(newCount===round.requiredPicks)showToast(`All ${round.requiredPicks} picks submitted for ${round.name}`);
+    await S.setShared(`picks:${user}`,up);setUserPicks(up);savingRef.current=false;
+    if(countPicks(cur)===round.requiredPicks)showToast(`All ${round.requiredPicks} picks submitted for ${round.name}`);
   };
 
-  // Detect missed rounds
-  const missedRounds=ROUNDS.filter(r=>isLocked(r.id)&&Object.keys((userPicks[r.id]||{})).length<r.requiredPicks&&(games||[]).some(g=>g.roundId===r.id));
+  const toggleOu=async(gid,val)=>{
+    if(locked||savingRef.current)return;
+    savingRef.current=true;
+    const freshPicks=(await S.getShared(`picks:${user}`))||{};
+    const cur=migratePicks(freshPicks[sr]||{});
+    const key=`${gid}_ou`;
+    if(cur[key]===val){delete cur[key]}
+    else{
+      if(countPicks(cur)>=round.requiredPicks&&!cur[key]){savingRef.current=false;return}
+      cur[key]=val;
+    }
+    const up={...freshPicks,[sr]:cur};
+    await S.setShared(`picks:${user}`,up);setUserPicks(up);savingRef.current=false;
+    if(countPicks(cur)===round.requiredPicks)showToast(`All ${round.requiredPicks} picks submitted for ${round.name}`);
+  };
 
-  return(<div className="an"><div className="st">MAKE YOUR PICKS</div>
+  const missedRounds=ROUNDS.filter(r=>isLocked(r.id)&&countPicks(migratePicks(userPicks[r.id]||{}))<r.requiredPicks&&(games||[]).some(g=>g.roundId===r.id));
+
+  return (<div className="an"><div className="st">MAKE YOUR PICKS</div>
     {missedRounds.length>0&&<div className="missed">
       You missed {missedRounds.length} round{missedRounds.length>1?"s":""}: {missedRounds.map(r=>r.name).join(", ")}. Submit all future picks to stay eligible for last place.
     </div>}
     <div className="fld"><label className="lbl">Round</label><select className="inp" value={sr} onChange={e=>setSr(e.target.value)}>
-      {ROUNDS.map(r=>{const l=isLocked(r.id),up=Object.keys((userPicks[r.id]||{})).length,d=up===r.requiredPicks;
+      {ROUNDS.map(r=>{const l=isLocked(r.id),up=countPicks(migratePicks(userPicks[r.id]||{})),d=up===r.requiredPicks;
         return <option key={r.id} value={r.id}>{l?(d?"\u2705 ":"\u274C "):(d?"\u2705 ":"")} {r.name} — {r.requiredPicks} picks {l?(d?"(submitted)":"(missed)"):(d?"(ready)":"")}</option>})}
     </select></div>
-    <div className="lbar"><div style={{color:"var(--t3)",fontSize:11}}>Locks {fmtLock(sr)}</div><div style={{fontFamily:"var(--fm)",fontWeight:700,fontSize:13}}>{locked?<span style={{color:"var(--red)"}}>LOCKED</span>:<span style={{color:"var(--g)"}}>{countdown(sr).text}</span>}</div></div>
+    <div className="lbar"><div style={{color:"var(--t3)",fontSize:11}}>Locks {fmtLock(sr)}</div><div style={{fontFamily:"var(--fm)",fontWeight:700,fontSize:13}}>{locked? <span style={{color:"var(--red)"}}>LOCKED</span>: <span style={{color:"var(--g)"}}>{countdown(sr).text}</span>}</div></div>
 
-    {/* Big success banner when all picks are in */}
     {done&&!locked&&<div className="sub-banner">
       <div className="sb-icon">{"\u2713"}</div>
       <div><div className="sb-text">ALL {round.requiredPicks} PICKS SUBMITTED</div><div className="sb-sub">Your picks for {round.name} are locked in. You can still change them until the round locks.</div></div>
@@ -479,7 +541,6 @@ function MakePicks({user,games,userPicks,setUserPicks,showToast}){
       MISSED — You submitted {pc}/{round.requiredPicks} picks before this round locked.
     </div>}
 
-    {/* Progress bar */}
     {!locked&&rGames.length>0&&<>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:4}}>
         <span style={{fontFamily:"var(--fm)",fontSize:12,fontWeight:700,color:done?"var(--g)":"var(--t2)"}}>{pc} / {round.requiredPicks} PICKS</span>
@@ -487,36 +548,37 @@ function MakePicks({user,games,userPicks,setUserPicks,showToast}){
         {done&&<span style={{fontFamily:"var(--fm)",fontSize:11,color:"var(--g)",fontWeight:600}}>FINALIZED</span>}
       </div>
       <div className="prog"><div className={cn("prog-fill",done?"full":"part")} style={{width:`${(pc/round.requiredPicks)*100}%`}}/></div>
-      {!done&&pc>0&&rGames.length>0&&<div className="not-sub-banner">You have {pc} pick{pc>1?"s":""} selected but need {round.requiredPicks} to finalize. Your picks are NOT submitted until all {round.requiredPicks} are selected.</div>}
-      {!done&&pc===0&&rGames.length>0&&<div className="not-sub-banner">You have not made any picks for this round yet. Select {round.requiredPicks} games to finalize your picks.</div>}
+      {!done&&pc>0&&rGames.length>0&&<div className="not-sub-banner">You have {pc} pick{pc>1?"s":""} selected but need {round.requiredPicks} to finalize. You can pick a team AND an over/under on the same game — each counts as 1 pick.</div>}
+      {!done&&pc===0&&rGames.length>0&&<div className="not-sub-banner">Select {round.requiredPicks} picks to finalize. You can pick a team AND an over/under on the same game — each counts as 1 pick.</div>}
     </>}
     {rGames.length===0?<div className="ey"><p>No games posted for this round yet.<br/>The commissioner will add games before the round begins.</p></div>:
-    rGames.map(g=>{const mp=picks[g.id];const canPick=!locked&&(!atMax||mp);
+    rGames.map(g=>{
+      const ats=getAts(picks,g.id), ou=getOu(picks,g.id);
+      const hasPick=ats||ou;
+      const canPickAts=!locked&&(!atMax||ats);
+      const canPickOu=!locked&&(!atMax||ou);
       const s1=parseInt(g.seed1)||99,s2=parseInt(g.seed2)||99;
-      // Away team (higher seed) on top, Home team (lower seed) on bottom
       const awayName=s1>s2?g.team1:g.team2, homeName=s1>s2?g.team2:g.team1;
       const awaySeed=s1>s2?g.seed1:g.seed2, homeSeed=s1>s2?g.seed2:g.seed1;
-      // Spread is entered for team1 — if we flipped, show the opposite spread for display
-      const flipped=s1<s2; // team1 is home, team2 is away — no flip needed; s1>s2 means team1=away
       const displaySpread=g.spread||"PK";
-      return(
-      <div key={g.id} className={cn("gm",mp&&"sel",locked&&"lk")}>
+      return (
+      <div key={g.id} className={cn("gm",hasPick&&"sel",locked&&"lk")}>
         <div className="gm-mu"><div className="gm-ts">
           <div className="gm-t away"><span className="gm-sd">{awaySeed}</span><Logo name={awayName} size={36}/><span>{awayName}</span></div>
           <div className="gm-t"><span className="gm-sd">{homeSeed}</span><Logo name={homeName} size={36}/><span>{homeName}</span><span className="gm-home-tag">HOME</span></div>
         </div><div className="gm-ln"><div className="gm-sp">{displaySpread}</div><div className="gm-ou">O/U {g.total||"–"}</div></div></div>
         <div className="gm-divider"/>
-        <div className="pk-row-label">SPREAD</div>
+        <div className="pk-row-label">SPREAD {ats&&<span style={{color:"var(--g)",marginLeft:6}}>PICKED</span>}</div>
         <div className="pk-row">
-          <button className={cn("pk",mp==="team1"&&"on")} onClick={()=>toggle(g.id,"team1")} disabled={locked||(!canPick&&mp!=="team1")}>{g.team1} {g.spread||"PK"}</button>
-          <button className={cn("pk",mp==="team2"&&"on")} onClick={()=>toggle(g.id,"team2")} disabled={locked||(!canPick&&mp!=="team2")}>{g.team2} {spread2(g.spread)}</button>
+          <button className={cn("pk",ats==="team1"&&"on")} onClick={()=>toggleAts(g.id,"team1")} disabled={locked||(!canPickAts&&ats!=="team1")}>{g.team1} {g.spread||"PK"}</button>
+          <button className={cn("pk",ats==="team2"&&"on")} onClick={()=>toggleAts(g.id,"team2")} disabled={locked||(!canPickAts&&ats!=="team2")}>{g.team2} {spread2(g.spread)}</button>
         </div>
-        <div className="pk-row-label">TOTAL</div>
+        <div className="pk-row-label">TOTAL {ou&&<span style={{color:"var(--g)",marginLeft:6}}>PICKED</span>}</div>
         <div className="pk-row">
-          <button className={cn("pk",mp==="over"&&"on")} onClick={()=>toggle(g.id,"over")} disabled={locked||(!canPick&&mp!=="over")}>Over {g.total||""}</button>
-          <button className={cn("pk",mp==="under"&&"on")} onClick={()=>toggle(g.id,"under")} disabled={locked||(!canPick&&mp!=="under")}>Under {g.total||""}</button>
+          <button className={cn("pk",ou==="over"&&"on")} onClick={()=>toggleOu(g.id,"over")} disabled={locked||(!canPickOu&&ou!=="over")}>Over {g.total||""}</button>
+          <button className={cn("pk",ou==="under"&&"on")} onClick={()=>toggleOu(g.id,"under")} disabled={locked||(!canPickOu&&ou!=="under")}>Under {g.total||""}</button>
         </div>
-        {atMax&&!mp&&!locked&&<div className="pk-full">All {round.requiredPicks} picks used — deselect one to pick this game</div>}
+        {atMax&&!ats&&!ou&&!locked&&<div className="pk-full">All {round.requiredPicks} picks used — deselect one to pick this game</div>}
       </div>)})}
   </div>);
 }
@@ -536,12 +598,13 @@ function ViewPicks({allPicks,users,games,allResults}){
         return <button key={un} className={cn("chp",sp===un&&"on")} onClick={()=>setSp(un)} style={!hasPicks?{opacity:.5}:{}}>{getUserDisplay(ud)} {!hasPicks?"(none)":""}</button>
       })}</div></div>
       {sp?<div className="crd"><div className="crd-t">{getUserDisplay(users[sp])}</div>
-        {(()=>{const picks=(allPicks[sp]||{})[sr]||{};if(!Object.keys(picks).length)return <div style={{color:"var(--t4)",fontSize:12,fontFamily:"var(--fm)"}}>No picks submitted for this round.</div>;
-        return Object.entries(picks).map(([gid,pick])=>{const gm=rGames.find(g=>g.id===gid);const res=results[gid];let st="pending";if(res&&res[pick])st=res[pick];
-        const pl=pick==="team1"?`${gm?.team1||"?"} ${gm?.spread||"PK"}`:pick==="team2"?`${gm?.team2||"?"} ${spread2(gm?.spread)}`:pick==="over"?`Over ${gm?.total||""}`:`Under ${gm?.total||""}`;
-        return <div key={gid} className="hi"><div><div style={{fontFamily:"var(--fm)",fontSize:9,color:"var(--t5)"}}>{gm?`${gm.team1} vs ${gm.team2}`:gid}</div>
-        <div style={{fontSize:13,marginTop:3,display:"flex",alignItems:"center",gap:7}}><Logo name={pick==="team1"?gm?.team1:pick==="team2"?gm?.team2:gm?.team1} size={18}/>{pl}</div></div>
-        <span className={cn("rb",st==="win"?"rw":st==="loss"?"rl":st==="push"?"rp":"rq")}>{st==="win"?"WIN":st==="loss"?"LOSS":st==="push"?"PUSH":"PENDING"}</span></div>})})()}
+        {(()=>{const picks=migratePicks((allPicks[sp]||{})[sr]||{});if(!countPicks(picks))return <div style={{color:"var(--t4)",fontSize:12,fontFamily:"var(--fm)"}}>No picks submitted for this round.</div>;
+        return Object.entries(picks).map(([pickKey,pickVal])=>{const gid=pickGameId(pickKey);const gm=rGames.find(g=>g.id===gid);const st=getPickResult(allResults,sr,pickKey,pickVal);const status=st||"pending";
+        const pl=pickVal==="team1"?`${gm?.team1||"?"} ${gm?.spread||"PK"}`:pickVal==="team2"?`${gm?.team2||"?"} ${spread2(gm?.spread)}`:pickVal==="over"?`Over ${gm?.total||""}`:`Under ${gm?.total||""}`;
+        const typeLabel=pickType(pickKey)==="ats"?"ATS":"O/U";
+        return <div key={pickKey} className="hi"><div><div style={{fontFamily:"var(--fm)",fontSize:9,color:"var(--t5)"}}>{gm?`${gm.team1} vs ${gm.team2}`:gid} <span style={{color:"var(--navy)"}}>{typeLabel}</span></div>
+        <div style={{fontSize:13,marginTop:3,display:"flex",alignItems:"center",gap:7}}><Logo name={pickVal==="team1"?gm?.team1:pickVal==="team2"?gm?.team2:gm?.team1} size={18}/>{pl}</div></div>
+        <span className={cn("rb",status==="win"?"rw":status==="loss"?"rl":status==="push"?"rp":"rq")}>{status==="win"?"WIN":status==="loss"?"LOSS":status==="push"?"PUSH":"PENDING"}</span></div>})})()}
       </div>:<div style={{color:"var(--t5)",fontSize:12,textAlign:"center",padding:24,fontFamily:"var(--fm)"}}>Select a player to view their picks</div>}
     </>}
   </div>);
@@ -551,8 +614,8 @@ function ViewPicks({allPicks,users,games,allResults}){
 function Standings({allPicks,allResults,users,games}){
   const players=Object.entries(users).filter(([u])=>u!==COMMISSIONER_USER);
   const st=players.map(([un,ud])=>{let w=0,l=0,p=0,rS=0,rW=0;const up=allPicks[un]||{};
-    ROUNDS.forEach(r=>{const rp=up[r.id]||{};const rr=allResults[r.id]||{};if(Object.keys(rr).length>0)rW++;if(Object.keys(rp).length===r.requiredPicks)rS++;
-    Object.entries(rp).forEach(([gid,pk])=>{const res=rr[gid];if(!res)return;if(res[pk]==="win")w++;else if(res[pk]==="push")p++;else if(res[pk]==="loss")l++})});
+    ROUNDS.forEach(r=>{const rp=migratePicks(up[r.id]||{});const rr=allResults[r.id]||{};if(Object.keys(rr).length>0)rW++;if(countPicks(rp)===r.requiredPicks)rS++;
+    Object.entries(rp).forEach(([pickKey,pickVal])=>{const res=getPickResult(allResults,r.id,pickKey,pickVal);if(!res)return;if(res==="win")w++;else if(res==="push")p++;else if(res==="loss")l++})});
     return{un,ud,pts:w+p*.5,w,l,p,rS,rW,full:rW>0&&rS>=rW};
   }).sort((a,b)=>b.pts-a.pts||b.w-a.w);
   const n=st.length,pot=n*PAYOUT_INFO.buyIn;
@@ -582,11 +645,10 @@ function Standings({allPicks,allResults,users,games}){
     let pending=0;
     const up=allPicks[un]||{};
     activeRounds.forEach(r=>{
-      const rp=up[r.id]||{};
-      const rr=allResults[r.id]||{};
-      Object.entries(rp).forEach(([gid,pick])=>{
-        const res=rr[gid];
-        if(!res||!res[pick])pending++;
+      const rp=migratePicks(up[r.id]||{});
+      Object.entries(rp).forEach(([pickKey,pickVal])=>{
+        const res=getPickResult(allResults,r.id,pickKey,pickVal);
+        if(!res)pending++;
       });
     });
     return pending;
@@ -646,25 +708,26 @@ function TrashTalk({user,userData}){
 
 // ─── History ─────────────────────────────────────────────────────────────────
 function History({user,games,userPicks,allResults}){
-  return(<div className="an"><div className="st">MY PICK HISTORY</div>
+  return (<div className="an"><div className="st">MY PICK HISTORY</div>
     {ROUNDS.map(round=>{
-      const picks=(userPicks||{})[round.id]||{};const rg=(games||[]).filter(g=>g.roundId===round.id);const res=allResults[round.id]||{};
-      const locked=isLocked(round.id),hasGames=rg.length>0,hasPicks=Object.keys(picks).length>0;
+      const picks=migratePicks((userPicks||{})[round.id]||{});const rg=(games||[]).filter(g=>g.roundId===round.id);
+      const locked=isLocked(round.id),hasGames=rg.length>0,pc=countPicks(picks),hasPicks=pc>0;
       const missed=locked&&hasGames&&!hasPicks;
-      const incomplete=locked&&hasGames&&hasPicks&&Object.keys(picks).length<round.requiredPicks;
-      if(!locked&&!hasPicks)return null;
-      let rw=0,rl=0,rp=0;Object.entries(picks).forEach(([gid,pk])=>{const r=res[gid];if(r?.[pk]==="win")rw++;else if(r?.[pk]==="loss")rl++;else if(r?.[pk]==="push")rp++});
+      const incomplete=locked&&hasGames&&hasPicks&&pc<round.requiredPicks;
+      if(!locked&&!hasPicks) return null;
+      let rw=0,rl=0,rp=0;Object.entries(picks).forEach(([pickKey,pickVal])=>{const r=getPickResult(allResults,round.id,pickKey,pickVal);if(r==="win")rw++;else if(r==="loss")rl++;else if(r==="push")rp++});
       return <div key={round.id} className="crd" style={{marginBottom:14}}>
         <div className="crd-t">{round.name}
           {(rw+rl+rp>0)&&<span className="bdg bdg-g">{rw}-{rl}-{rp}</span>}
           {missed&&<span className="bdg bdg-r">MISSED</span>}
-          {incomplete&&<span className="bdg bdg-y">INCOMPLETE ({Object.keys(picks).length}/{round.requiredPicks})</span>}
+          {incomplete&&<span className="bdg bdg-y">INCOMPLETE ({pc}/{round.requiredPicks})</span>}
         </div>
         {missed?<div style={{color:"var(--red)",fontSize:12,fontFamily:"var(--fm)"}}>No picks submitted — round locked without entries.</div>:
-        Object.entries(picks).map(([gid,pick])=>{const gm=rg.find(g=>g.id===gid);const result=res[gid];let st="pending";if(result&&result[pick])st=result[pick];
-        const pl=pick==="team1"?`${gm?.team1||"?"} ${gm?.spread||"PK"}`:pick==="team2"?`${gm?.team2||"?"} ${spread2(gm?.spread)}`:pick==="over"?`Over ${gm?.total||""}`:`Under ${gm?.total||""}`;
-        return <div key={gid} className="hi"><div><div style={{fontFamily:"var(--fm)",fontSize:9,color:"var(--t5)"}}>{gm?`${gm.team1} vs ${gm.team2}`:gid}</div>
-        <div style={{fontSize:13,marginTop:3,display:"flex",alignItems:"center",gap:7}}><Logo name={pick==="team1"?gm?.team1:pick==="team2"?gm?.team2:gm?.team1} size={18}/>{pl}</div></div>
+        Object.entries(picks).map(([pickKey,pickVal])=>{const gid=pickGameId(pickKey);const gm=rg.find(g=>g.id===gid);const st=getPickResult(allResults,round.id,pickKey,pickVal)||"pending";
+        const pl=pickVal==="team1"?`${gm?.team1||"?"} ${gm?.spread||"PK"}`:pickVal==="team2"?`${gm?.team2||"?"} ${spread2(gm?.spread)}`:pickVal==="over"?`Over ${gm?.total||""}`:`Under ${gm?.total||""}`;
+        const typeLabel=pickType(pickKey)==="ats"?"ATS":"O/U";
+        return <div key={pickKey} className="hi"><div><div style={{fontFamily:"var(--fm)",fontSize:9,color:"var(--t5)"}}>{gm?`${gm.team1} vs ${gm.team2}`:gid} <span style={{color:"var(--navy)"}}>{typeLabel}</span></div>
+        <div style={{fontSize:13,marginTop:3,display:"flex",alignItems:"center",gap:7}}><Logo name={pickVal==="team1"?gm?.team1:pickVal==="team2"?gm?.team2:gm?.team1} size={18}/>{pl}</div></div>
         <span className={cn("rb",st==="win"?"rw":st==="loss"?"rl":st==="push"?"rp":"rq")}>{st==="win"?"WIN":st==="loss"?"LOSS":st==="push"?"PUSH":"PENDING"}</span></div>})}
       </div>}).filter(Boolean)}
     {ROUNDS.every(r=>!isLocked(r.id))&&Object.values(userPicks||{}).every(r=>!Object.keys(r).length)&&<div className="ey"><p>No picks yet. Head to Make Picks to get started.</p></div>}
@@ -907,7 +970,17 @@ export default function App(){
       if(u){
         const playerNames=Object.keys(u).filter(un=>un!==COMMISSIONER_USER);
         const pickResults=await Promise.all(playerNames.map(un=>S.getShared(`picks:${un}`)));
-        const pe={};playerNames.forEach((un,i)=>{if(pickResults[i])pe[un]=pickResults[i]});
+        const pe={};
+        for(let i=0;i<playerNames.length;i++){
+          if(pickResults[i]){
+            const migrated=migrateAllRounds(pickResults[i]);
+            pe[playerNames[i]]=migrated;
+            // Save migrated picks back if they changed
+            if(JSON.stringify(migrated)!==JSON.stringify(pickResults[i])){
+              await S.setShared(`picks:${playerNames[i]}`,migrated);
+            }
+          }
+        }
         setAllPicks(pe);if(user&&pe[user])setUserPicks(pe[user]);
       }
       setLoaded(true);
