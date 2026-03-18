@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
 const ROUNDS = [
-  { id: "r64d1", name: "Round of 64 — Day 1", requiredPicks: 8, lockDate: "2026-03-19T17:00:00Z" },
-  { id: "r64d2", name: "Round of 64 — Day 2", requiredPicks: 8, lockDate: "2026-03-20T17:00:00Z" },
-  { id: "r32d1", name: "Round of 32 — Day 1", requiredPicks: 6, lockDate: "2026-03-21T17:00:00Z" },
-  { id: "r32d2", name: "Round of 32 — Day 2", requiredPicks: 6, lockDate: "2026-03-22T17:00:00Z" },
-  { id: "s16d1", name: "Sweet 16 — Day 1", requiredPicks: 4, lockDate: "2026-03-26T20:00:00Z" },
-  { id: "s16d2", name: "Sweet 16 — Day 2", requiredPicks: 4, lockDate: "2026-03-27T20:00:00Z" },
-  { id: "e8d1", name: "Elite 8 — Day 1", requiredPicks: 2, lockDate: "2026-03-28T20:00:00Z" },
-  { id: "e8d2", name: "Elite 8 — Day 2", requiredPicks: 2, lockDate: "2026-03-29T20:00:00Z" },
-  { id: "f4", name: "Final Four", requiredPicks: 2, lockDate: "2026-04-04T20:00:00Z" },
-  { id: "champ", name: "Championship", requiredPicks: 1, lockDate: "2026-04-06T23:00:00Z" },
+  { id: "r64d1", name: "Round of 64 — Day 1", requiredPicks: 8 },
+  { id: "r64d2", name: "Round of 64 — Day 2", requiredPicks: 8 },
+  { id: "r32d1", name: "Round of 32 — Day 1", requiredPicks: 6 },
+  { id: "r32d2", name: "Round of 32 — Day 2", requiredPicks: 6 },
+  { id: "s16d1", name: "Sweet 16 — Day 1", requiredPicks: 4 },
+  { id: "s16d2", name: "Sweet 16 — Day 2", requiredPicks: 4 },
+  { id: "e8d1", name: "Elite 8 — Day 1", requiredPicks: 2 },
+  { id: "e8d2", name: "Elite 8 — Day 2", requiredPicks: 2 },
+  { id: "f4", name: "Final Four", requiredPicks: 2 },
+  { id: "champ", name: "Championship", requiredPicks: 1 },
 ];
 const TOTAL_PICKS = ROUNDS.reduce((s, r) => s + r.requiredPicks, 0); // 43
 const COMMISSIONER_USER = "commissioner";
@@ -46,15 +46,6 @@ const ESPN_IDS = {
 };
 function getEspnId(n){return n?ESPN_IDS[n.trim().toLowerCase()]||0:0}
 function teamLogoSrc(n){const id=getEspnId(n);return id?`https://a.espncdn.com/i/teamlogos/ncaa/500/${id}.png`:null}
-
-// Sort teams so lower seed (higher number = underdog) is listed second (away), lower number = home
-function orderTeams(game){
-  const s1=parseInt(game.seed1)||99,s2=parseInt(game.seed2)||99;
-  // Lower seed number = better team = home (listed second/bottom). Higher seed = away (listed first/top)
-  if(s1>s2) return {away:{name:game.team1,seed:game.seed1},home:{name:game.team2,seed:game.seed2},spread:game.spread,total:game.total,flipped:false};
-  if(s2>s1) return {away:{name:game.team2,seed:game.seed2},home:{name:game.team1,seed:game.seed1},spread:game.spread?spread2(game.spread):game.spread,total:game.total,flipped:true};
-  return {away:{name:game.team1,seed:game.seed1},home:{name:game.team2,seed:game.seed2},spread:game.spread,total:game.total,flipped:false};
-}
 
 const S={
   async getShared(k){
@@ -284,7 +275,7 @@ select.inp{cursor:pointer;appearance:none;background-image:url("data:image/svg+x
 /* Game cards */
 .gm{background:var(--bg);border:1px solid var(--bdr);border-radius:10px;padding:20px;margin-bottom:12px;transition:all .2s;box-shadow:0 1px 3px rgba(0,0,0,.03)}
 .gm.sel{border-color:var(--navy);box-shadow:0 0 0 2px rgba(15,27,45,.1),0 4px 12px rgba(15,27,45,.06)}
-.gm.lk{opacity:.45;pointer-events:none}
+.gm.lk{opacity:.6;pointer-events:none}
 .gm-mu{display:flex;align-items:center;gap:16px;margin-bottom:14px}
 .gm-ts{flex:1;display:flex;flex-direction:column;gap:8px}
 .gm-t{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--t1)}
@@ -301,8 +292,9 @@ select.inp{cursor:pointer;appearance:none;background-image:url("data:image/svg+x
 .pk-row-label{font-family:var(--fm);font-size:9px;color:var(--t5);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px}
 .pk{padding:12px 8px;border-radius:6px;cursor:pointer;font-family:var(--fm);font-size:12px;font-weight:500;text-align:center;transition:all .15s;background:var(--bg2);border:1px solid var(--bdr);color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pk:hover:not(:disabled){border-color:var(--navy);color:var(--t1);background:rgba(15,27,45,.03)}
-.pk.on{background:var(--navy);border-color:var(--navy);color:#fff;font-weight:700}
+.pk.on{background:var(--navy);border-color:var(--navy);color:#fff;font-weight:700;animation:pkFlash .3s ease}
 .pk:disabled{cursor:not-allowed;opacity:.35}
+@keyframes pkFlash{0%{transform:scale(.97)}50%{transform:scale(1.02)}100%{transform:scale(1)}}
 .pk-full{font-family:var(--fm);font-size:9px;color:var(--t4);text-align:center;padding:6px;background:var(--bg3);border-radius:4px;margin-top:4px}
 
 /* Lock bar */
@@ -637,7 +629,7 @@ function MakePicks({user,games,userPicks,setUserPicks,showToast}){
 // ─── View Picks (The Board) ──────────────────────────────────────────────────
 function ViewPicks({allPicks,users,games,allResults}){
   const[sr,setSr]=useState(()=>{const m=getMostRecentLockedRound(games);return m?m.id:ROUNDS[0].id});
-  const[sp,setSp]=useState(null);const roundLocked=isRoundFullyLocked(sr,games);const rGames=(games||[]).filter(g=>g.roundId===sr);const results=allResults[sr]||{};
+  const[sp,setSp]=useState(null);const roundLocked=isRoundFullyLocked(sr,games);const rGames=(games||[]).filter(g=>g.roundId===sr).sort((a,b)=>{if(!a.tipTime)return 1;if(!b.tipTime)return -1;return new Date(a.tipTime)-new Date(b.tipTime)});const results=allResults[sr]||{};
   const players=Object.entries(users).filter(([u])=>u!==COMMISSIONER_USER);
   return(<div className="an"><div className="st">THE BOARD — PLAYER PICKS</div>
     <div className="fld"><label className="lbl">Round</label><select className="inp" value={sr} onChange={e=>{setSr(e.target.value);setSp(null)}}>
@@ -645,7 +637,7 @@ function ViewPicks({allPicks,users,games,allResults}){
     </select></div>
     {!isRoundPartiallyLocked(sr,games)?<div className="ey"><p>Picks are hidden until games tip off.<br/>First tip: {getFirstTipInRound(sr,games)?fmtTime(getFirstTipInRound(sr,games)):"TBD"}</p></div>:<>
       <div style={{marginBottom:14}}><label className="lbl">Player</label><div>{players.map(([un,ud])=>{
-        const hasPicks=Object.keys((allPicks[un]||{})[sr]||{}).length>0;
+        const hasPicks=countPicks(migratePicks((allPicks[un]||{})[sr]||{}))>0;
         return <button key={un} className={cn("chp",sp===un&&"on")} onClick={()=>setSp(un)} style={!hasPicks?{opacity:.5}:{}}>{getUserDisplay(ud)} {!hasPicks?"(none)":""}</button>
       })}</div></div>
       {sp?<div className="crd"><div className="crd-t">{getUserDisplay(users[sp])}</div>
@@ -664,16 +656,18 @@ function ViewPicks({allPicks,users,games,allResults}){
 // ─── Standings ───────────────────────────────────────────────────────────────
 function Standings({allPicks,allResults,users,games}){
   const players=Object.entries(users).filter(([u])=>u!==COMMISSIONER_USER);
-  const st=players.map(([un,ud])=>{let w=0,l=0,p=0,rS=0,rW=0,totalPicks=0;const up=allPicks[un]||{};
+  // Pool-wide: total picks available = sum of requiredPicks for rounds that have games posted
+  const totalAvailable=ROUNDS.reduce((sum,r)=>{
+    const hasGames=(games||[]).some(g=>g.roundId===r.id);
+    return sum+(hasGames?r.requiredPicks:0);
+  },0);
+  const st=players.map(([un,ud])=>{let w=0,l=0,p=0,rS=0,rW=0;const up=allPicks[un]||{};
     ROUNDS.forEach(r=>{
       const rp=migratePicks(up[r.id]||{});
       const locked=isRoundFullyLocked(r.id,games);
       const hasGames=(games||[]).some(g=>g.roundId===r.id);
-      // Only count locked rounds with games for eligibility
       if(locked&&hasGames)rW++;
       if(locked&&hasGames&&countPicks(rp)===r.requiredPicks)rS++;
-      totalPicks+=countPicks(rp);
-      // Only score picks against graded results
       Object.entries(rp).forEach(([pickKey,pickVal])=>{
         const res=getPickResult(allResults,r.id,pickKey,pickVal);
         if(!res)return;
@@ -681,7 +675,7 @@ function Standings({allPicks,allResults,users,games}){
       });
     });
     const graded=w+l+p;
-    return{un,ud,pts:w+p*.5,w,l,p,rS,rW,full:rW===0||rS>=rW,totalPicks,graded};
+    return{un,ud,pts:w+p*.5,w,l,p,rS,rW,full:rW===0||rS>=rW,graded};
   }).sort((a,b)=>b.pts-a.pts||b.w-a.w);
   const n=st.length,pot=n*PAYOUT_INFO.buyIn;
   const remaining=pot-25;
@@ -723,7 +717,7 @@ function Standings({allPicks,allResults,users,games}){
       {st.length===0?<div className="ey"><p>No players registered yet.</p></div>:st.map((s,i)=>{
         const isFirst=i===0&&n>1;
         const isToilet=s.un===toiletBowlUser;
-        const remaining=s.totalPicks-s.graded;
+        const remaining=totalAvailable-s.graded;
         return <div key={s.un} style={{display:"grid",gridTemplateColumns:"1fr auto",gap:0,borderBottom:"1px solid var(--bdr)"}}>
           <div className={cn("lr-left",isFirst&&"top1",isToilet&&"topL")} style={{display:"grid",gridTemplateColumns:"30px 1fr 42px 64px",padding:"11px 12px",gap:6,alignItems:"center"}}>
             <div className={cn("lrk",isFirst&&"p1",isToilet&&"pL")}>{i+1}</div>
@@ -732,13 +726,13 @@ function Standings({allPicks,allResults,users,games}){
           </div>
           <div style={{display:"grid",gridTemplateColumns:"40px 40px 40px",padding:"11px 8px",gap:4,alignItems:"center",background:"var(--bg3)",borderLeft:"2px solid var(--bdr)"}}>
             <div style={{textAlign:"center",fontFamily:"var(--fm)",fontSize:11,color:"var(--t3)",fontWeight:600}}>{s.graded}</div>
-            <div style={{textAlign:"center",fontFamily:"var(--fm)",fontSize:11,color:"var(--t4)"}}>{s.totalPicks}</div>
+            <div style={{textAlign:"center",fontFamily:"var(--fm)",fontSize:11,color:"var(--t4)"}}>{totalAvailable}</div>
             <div style={{textAlign:"center",fontFamily:"var(--fm)",fontSize:11,fontWeight:700,color:remaining>0?"var(--navy)":"var(--t5)"}}>{remaining}</div>
           </div>
         </div>})}
     </div>
     <div style={{marginTop:8,fontSize:9,color:"var(--t5)",fontFamily:"var(--fm)",textAlign:"center",lineHeight:1.8}}>
-      GRD = Graded (W+L+P) &middot; TOT = Total picks submitted &middot; LEFT = Remaining ungraded &middot; Tiebreaker: most wins
+      GRD = Graded (W+L+P) &middot; TOT = Total picks available &middot; LEFT = Remaining to be graded &middot; Tiebreaker: most wins
     </div>
   </div>);
 }
@@ -794,7 +788,7 @@ function Commish({games,setGames,allResults,setAllResults,allPicks,setAllPicks,u
   const[f,sF]=useState({team1:"",team2:"",seed1:"",seed2:"",spread:"",total:"",tipTime:""});
   const[editUser,setEditUser]=useState(null);const[editRound,setEditRound]=useState(ROUNDS[0].id);
   const[saving,setSaving]=useState(false);
-  const rg=(games||[]).filter(g=>g.roundId===sr);const res=allResults[sr]||{};
+  const rg=(games||[]).filter(g=>g.roundId===sr).sort((a,b)=>{if(!a.tipTime)return 1;if(!b.tipTime)return -1;return new Date(a.tipTime)-new Date(b.tipTime)});const res=allResults[sr]||{};
   const players=Object.entries(users).filter(([u])=>u!==COMMISSIONER_USER);
 
   const add=async()=>{if(!f.team1||!f.team2||saving)return;
