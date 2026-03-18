@@ -222,27 +222,17 @@ body,#root{background:var(--bg2);color:var(--t1);font-family:var(--fd);min-heigh
 .btn-out:hover{border-color:var(--red);color:#fff}
 
 /* Countdown */
-.cd-bar{background:var(--navy2);padding:10px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:50px;z-index:99}
-.cd-bar.warn{background:linear-gradient(90deg,rgba(202,138,4,0.15),var(--navy2) 70%)}
-.cd-bar.warn .cd-timer{color:var(--ylw)}
-.cd-bar.urg{background:linear-gradient(90deg,rgba(220,38,38,0.2),var(--navy2) 70%);animation:cdP 1.5s infinite}
-.cd-bar.urg .cd-timer{color:#ef4444}
-@keyframes cdP{0%,100%{background:linear-gradient(90deg,rgba(220,38,38,0.2),var(--navy2) 70%)}50%{background:linear-gradient(90deg,rgba(220,38,38,0.35),var(--navy2) 70%)}}
-.cd-left{display:flex;flex-direction:column;gap:2px}
+.cd-bar{background:var(--navy2);padding:12px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:50px;z-index:99}
+.cd-left{display:flex;flex-direction:column;gap:2px;width:100%}
 .cd-round{font-weight:800;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:#fff}
-.cd-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:3px}
-.cd-lock-time{font-family:var(--fm);font-size:10px;color:rgba(255,255,255,0.7);letter-spacing:.5px;font-weight:600}
-.cd-timer{font-family:var(--fm);font-weight:700;font-size:28px;color:var(--g2);letter-spacing:2px;line-height:1}
-.cd-locked{color:rgba(255,255,255,0.3);font-family:var(--fm);font-size:13px;letter-spacing:2px;font-weight:600}
+.cd-lock-time{font-family:var(--fm);font-size:10px;color:rgba(255,255,255,0.7);letter-spacing:1px;font-weight:700;text-transform:uppercase}
 
 /* Status pills in countdown bar */
-.cd-status-pill{font-family:var(--fm);font-size:10px;font-weight:700;padding:4px 12px;border-radius:4px;letter-spacing:1px;animation:fu .3s ease}
+.cd-status-pill{font-family:var(--fm);font-size:9px;font-weight:700;padding:3px 10px;border-radius:4px;letter-spacing:1px}
 .cd-pill-done{background:rgba(34,197,94,0.2);color:#4ade80;border:1px solid rgba(34,197,94,0.3)}
 .cd-pill-notdone{background:rgba(239,68,68,0.2);color:#fca5a5;border:1px solid rgba(239,68,68,0.3)}
 .cd-pill-wait{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.4);border:1px solid rgba(255,255,255,0.1)}
-/* Done state - subtle green left border */
 .cd-done-bar{border-left:4px solid var(--g2)}
-/* Not done state - subtle red left border to draw attention */
 .cd-notdone-bar{border-left:4px solid #ef4444}
 
 /* Nav */
@@ -413,7 +403,7 @@ select.inp{cursor:pointer;appearance:none;background-image:url("data:image/svg+x
   .main{padding:14px 10px 36px}.lr{grid-template-columns:24px 1fr 38px 52px 32px;padding:9px 6px;gap:3px}.lnm{font-size:10px}
   .hdr{padding:10px 14px}.brand{font-size:15px}.brand small{font-size:8px}.lb{font-size:26px}.lc{padding:28px 20px}
   .ng{grid-template-columns:1fr}.cf2{grid-template-columns:1fr}.gm-t{font-size:13px}
-  .cd-bar{padding:8px 14px;top:44px}.cd-timer{font-size:22px}.cd-round{font-size:10px}
+  .cd-bar{padding:8px 14px;top:44px}.cd-round{font-size:10px}
   .stabs{flex-wrap:wrap}.stab{font-size:9px;padding:6px 8px}
 }
 `;
@@ -483,29 +473,36 @@ function CountdownBar({userPicks,games}){
   const[,setT]=useState(0);
   useEffect(()=>{const i=setInterval(()=>setT(t=>t+1),1000);return()=>clearInterval(i)},[]);
   const nextGame=getNextTipoff(games);
-  if(!nextGame) return <div className="cd-bar"><div className="cd-left"><span className="cd-round">ALL GAMES TIPPED</span></div><div className="cd-locked">TOURNAMENT IN PROGRESS</div></div>;
+  if(!nextGame) return <div className="cd-bar"><div className="cd-left"><span className="cd-round">ALL GAMES TIPPED</span><span className="cd-lock-time">TOURNAMENT IN PROGRESS</span></div></div>;
   const round=ROUNDS.find(r=>r.id===nextGame.roundId);
-  const cd=countdownTo(nextGame.tipTime);
-  // Count picks for this round
   const roundPicks=migratePicks((userPicks||{})[nextGame.roundId]||{});
   const submitted=countPicks(roundPicks);
   const needed=round?round.requiredPicks:0;
   const done=submitted>=needed&&needed>0;
   const hasGames=(games||[]).some(g=>g.roundId===nextGame.roundId);
+  const cd=countdownTo(nextGame.tipTime);
   return (
-    <div className={cn("cd-bar",cd.urgent&&"urg",!cd.urgent&&cd.warning&&"warn",done&&"cd-done-bar",!done&&hasGames&&"cd-notdone-bar")}>
+    <div className={cn("cd-bar",done&&"cd-done-bar",!done&&hasGames&&"cd-notdone-bar")}>
       <div className="cd-left">
-        <span className="cd-round">{round?round.name:"NEXT GAME"}</span>
-        <div className="cd-meta">
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+          <span className="cd-round">{round?round.name:"NEXT"}</span>
           {done
             ? <span className="cd-status-pill cd-pill-done">PICKS FINALIZED</span>
             : hasGames
-              ? <span className="cd-status-pill cd-pill-notdone">NOT SUBMITTED — {submitted}/{needed}</span>
-              : <span className="cd-status-pill cd-pill-wait">GAMES NOT YET POSTED</span>}
-          <span className="cd-lock-time">Next tip: {fmtTime(nextGame.tipTime)}</span>
+              ? <span className="cd-status-pill cd-pill-notdone">{submitted}/{needed} PICKS</span>
+              : <span className="cd-status-pill cd-pill-wait">NO GAMES YET</span>}
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span className="cd-lock-time">NEXT TIP:</span>
+          <Logo name={nextGame.team1} size={20}/>
+          <span style={{color:"#fff",fontWeight:700,fontSize:12,fontFamily:"var(--fd)",letterSpacing:.5}}>{nextGame.team1}</span>
+          <span style={{color:"rgba(255,255,255,0.4)",fontSize:10,fontFamily:"var(--fm)"}}>vs</span>
+          <span style={{color:"#fff",fontWeight:700,fontSize:12,fontFamily:"var(--fd)",letterSpacing:.5}}>{nextGame.team2}</span>
+          <Logo name={nextGame.team2} size={20}/>
+          <span style={{color:"rgba(255,255,255,0.6)",fontFamily:"var(--fm)",fontSize:10,marginLeft:4}}>{fmtTime(nextGame.tipTime)}</span>
+          <span style={{fontFamily:"var(--fm)",fontSize:11,fontWeight:700,color:cd.urgent?"#ef4444":cd.warning?"var(--ylw)":"var(--g2)",marginLeft:4}}>{cd.text}</span>
         </div>
       </div>
-      <div className="cd-timer">{cd.text}</div>
     </div>
   );
 }
