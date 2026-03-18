@@ -641,13 +641,23 @@ function ViewPicks({allPicks,users,games,allResults}){
         return <button key={un} className={cn("chp",sp===un&&"on")} onClick={()=>setSp(un)} style={!hasPicks?{opacity:.5}:{}}>{getUserDisplay(ud)} {!hasPicks?"(none)":""}</button>
       })}</div></div>
       {sp?<div className="crd"><div className="crd-t">{getUserDisplay(users[sp])}</div>
-        {(()=>{const picks=migratePicks((allPicks[sp]||{})[sr]||{});if(!countPicks(picks))return <div style={{color:"var(--t4)",fontSize:12,fontFamily:"var(--fm)"}}>No picks submitted for this round.</div>;
-        return Object.entries(picks).map(([pickKey,pickVal])=>{const gid=pickGameId(pickKey);const gm=rGames.find(g=>g.id===gid);const st=getPickResult(allResults,sr,pickKey,pickVal);const status=st||"pending";
+        {(()=>{const allPlayerPicks=migratePicks((allPicks[sp]||{})[sr]||{});
+        // Only show picks for games that have tipped
+        const visiblePicks=Object.entries(allPlayerPicks).filter(([pickKey])=>{
+          const gid=pickGameId(pickKey);
+          const gm=rGames.find(g=>g.id===gid);
+          return gm&&isGameTipped(gm);
+        });
+        const hiddenCount=countPicks(allPlayerPicks)-visiblePicks.length;
+        if(!visiblePicks.length&&!hiddenCount)return <div style={{color:"var(--t4)",fontSize:12,fontFamily:"var(--fm)"}}>No picks submitted for this round.</div>;
+        return <>{visiblePicks.map(([pickKey,pickVal])=>{const gid=pickGameId(pickKey);const gm=rGames.find(g=>g.id===gid);const st=getPickResult(allResults,sr,pickKey,pickVal);const status=st||"pending";
         const pl=pickVal==="team1"?`${gm?.team1||"?"} ${gm?.spread||"PK"}`:pickVal==="team2"?`${gm?.team2||"?"} ${spread2(gm?.spread)}`:pickVal==="over"?`Over ${gm?.total||""}`:`Under ${gm?.total||""}`;
         const typeLabel=pickType(pickKey)==="ats"?"ATS":"O/U";
         return <div key={pickKey} className="hi"><div><div style={{fontFamily:"var(--fm)",fontSize:9,color:"var(--t5)"}}>{gm?`${gm.team1} vs ${gm.team2}`:gid} <span style={{color:"var(--navy)"}}>{typeLabel}</span></div>
         <div style={{fontSize:13,marginTop:3,display:"flex",alignItems:"center",gap:7}}><Logo name={pickVal==="team1"?gm?.team1:pickVal==="team2"?gm?.team2:gm?.team1} size={18}/>{pl}</div></div>
-        <span className={cn("rb",status==="win"?"rw":status==="loss"?"rl":status==="push"?"rp":"rq")}>{status==="win"?"WIN":status==="loss"?"LOSS":status==="push"?"PUSH":"PENDING"}</span></div>})})()}
+        <span className={cn("rb",status==="win"?"rw":status==="loss"?"rl":status==="push"?"rp":"rq")}>{status==="win"?"WIN":status==="loss"?"LOSS":status==="push"?"PUSH":"PENDING"}</span></div>})}
+        {hiddenCount>0&&<div style={{padding:"10px 0",fontFamily:"var(--fm)",fontSize:11,color:"var(--t4)",textAlign:"center",borderTop:"1px solid var(--bdr)",marginTop:8}}>{hiddenCount} pick{hiddenCount>1?"s":""} hidden until game{hiddenCount>1?"s":""} tip{hiddenCount===1?"s":""} off</div>}
+        </>})()}
       </div>:<div style={{color:"var(--t5)",fontSize:12,textAlign:"center",padding:24,fontFamily:"var(--fm)"}}>Select a player to view their picks</div>}
     </>}
   </div>);
