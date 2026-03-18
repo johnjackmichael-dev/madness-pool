@@ -330,11 +330,12 @@ select.inp{cursor:pointer;appearance:none;background-image:url("data:image/svg+x
 .not-sub-banner{background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;padding:12px 16px;margin-bottom:14px;font-size:12px;color:#92400e;font-weight:600;line-height:1.5}
 
 /* Standings */
-.lr{display:grid;grid-template-columns:30px 1fr 48px 64px 40px;align-items:center;padding:11px 12px;gap:6px;border-bottom:1px solid var(--bdr)}
+.lr{display:grid;grid-template-columns:30px 1fr 48px 64px;align-items:center;padding:11px 12px;gap:6px;border-bottom:1px solid var(--bdr)}
+.lh-cell{font-family:var(--fm);font-size:9px;color:var(--t4);letter-spacing:1.5px;font-weight:700;text-transform:uppercase}
 .lr:hover{background:var(--bg2)}
 .lr.lh{font-family:var(--fm);font-size:8px;color:var(--t4);text-transform:uppercase;letter-spacing:1.5px;border-bottom:2px solid var(--bdr)}
 .lr:last-child{border-bottom:none}
-.lr.top1{background:rgba(22,163,74,.04)}.lr.topL{background:var(--rg)}
+.lr.top1,.lr-left.top1{background:rgba(22,163,74,.04)}.lr.topL,.lr-left.topL{background:var(--rg)}
 .lrk{font-size:20px;font-weight:900;color:var(--t5);text-align:center}
 .lrk.p1{color:var(--g)}.lrk.pL{color:var(--red)}
 .lnm{font-weight:600;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--t2)}
@@ -400,7 +401,7 @@ select.inp{cursor:pointer;appearance:none;background-image:url("data:image/svg+x
 .ld{animation:gl 1.4s infinite}
 
 @media(max-width:600px){
-  .main{padding:14px 10px 36px}.lr{grid-template-columns:24px 1fr 38px 52px 32px;padding:9px 6px;gap:3px}.lnm{font-size:10px}
+  .main{padding:14px 10px 36px}.lr{grid-template-columns:24px 1fr 38px 52px;padding:9px 6px;gap:3px}.lnm{font-size:10px}
   .hdr{padding:10px 14px}.brand{font-size:15px}.brand small{font-size:8px}.lb{font-size:26px}.lc{padding:28px 20px}
   .ng{grid-template-columns:1fr}.cf2{grid-template-columns:1fr}.gm-t{font-size:13px}
   .cd-bar{padding:8px 14px;top:44px}.cd-round{font-size:10px}
@@ -663,7 +664,7 @@ function ViewPicks({allPicks,users,games,allResults}){
 // ─── Standings ───────────────────────────────────────────────────────────────
 function Standings({allPicks,allResults,users,games}){
   const players=Object.entries(users).filter(([u])=>u!==COMMISSIONER_USER);
-  const st=players.map(([un,ud])=>{let w=0,l=0,p=0,rS=0,rW=0;const up=allPicks[un]||{};
+  const st=players.map(([un,ud])=>{let w=0,l=0,p=0,rS=0,rW=0,totalPicks=0;const up=allPicks[un]||{};
     ROUNDS.forEach(r=>{
       const rp=migratePicks(up[r.id]||{});
       const locked=isRoundFullyLocked(r.id,games);
@@ -671,6 +672,7 @@ function Standings({allPicks,allResults,users,games}){
       // Only count locked rounds with games for eligibility
       if(locked&&hasGames)rW++;
       if(locked&&hasGames&&countPicks(rp)===r.requiredPicks)rS++;
+      totalPicks+=countPicks(rp);
       // Only score picks against graded results
       Object.entries(rp).forEach(([pickKey,pickVal])=>{
         const res=getPickResult(allResults,r.id,pickKey,pickVal);
@@ -678,7 +680,8 @@ function Standings({allPicks,allResults,users,games}){
         if(res==="win")w++;else if(res==="push")p++;else if(res==="loss")l++;
       });
     });
-    return{un,ud,pts:w+p*.5,w,l,p,rS,rW,full:rW===0||rS>=rW};
+    const graded=w+l+p;
+    return{un,ud,pts:w+p*.5,w,l,p,rS,rW,full:rW===0||rS>=rW,totalPicks,graded};
   }).sort((a,b)=>b.pts-a.pts||b.w-a.w);
   const n=st.length,pot=n*PAYOUT_INFO.buyIn;
   const remaining=pot-25;
@@ -691,29 +694,6 @@ function Standings({allPicks,allResults,users,games}){
   // Find the toilet bowl leader — last place among fully eligible players only
   const eligiblePlayers=st.filter(s=>s.full);
   const toiletBowlUser=eligiblePlayers.length>1?eligiblePlayers[eligiblePlayers.length-1].un:null;
-
-  // Find current active round(s) for "games left" — rounds with tipped but ungraded games
-  const activeRounds=ROUNDS.filter(r=>{
-    if(!isRoundPartiallyLocked(r.id,games))return false;
-    const rr=allResults[r.id]||{};
-    const roundGames=(games||[]).filter(g=>g.roundId===r.id);
-    if(roundGames.length===0)return false;
-    return roundGames.some(g=>isGameTipped(g)&&(!rr[g.id]||(!rr[g.id].team1&&!rr[g.id].over)));
-  });
-
-  // Count pending picks per player for active rounds
-  function getPending(un){
-    let pending=0;
-    const up=allPicks[un]||{};
-    activeRounds.forEach(r=>{
-      const rp=migratePicks(up[r.id]||{});
-      Object.entries(rp).forEach(([pickKey,pickVal])=>{
-        const res=getPickResult(allResults,r.id,pickKey,pickVal);
-        if(!res)pending++;
-      });
-    });
-    return pending;
-  }
 
   return(<div className="an"><div className="st">STANDINGS</div>
     <div className="crd" style={{marginBottom:18}}>
@@ -732,20 +712,33 @@ function Standings({allPicks,allResults,users,games}){
       </div>
     </div>
     <div className="crd"><div className="crd-t">LEADERBOARD</div>
-      <div className="lr lh"><div>#</div><div>PLAYER</div><div style={{textAlign:"right"}}>PTS</div><div style={{textAlign:"right"}}>W-L-P</div><div style={{textAlign:"center"}}>LIVE</div></div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:0,borderBottom:"2px solid var(--bdr)"}}>
+        <div style={{display:"grid",gridTemplateColumns:"30px 1fr 42px 64px",padding:"8px 12px",gap:6,alignItems:"center"}}>
+          <div className="lh-cell">#</div><div className="lh-cell">PLAYER</div><div className="lh-cell" style={{textAlign:"right"}}>PTS</div><div className="lh-cell" style={{textAlign:"right"}}>W-L-P</div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"40px 40px 40px",padding:"8px 8px",gap:4,alignItems:"center",background:"var(--bg3)",borderLeft:"2px solid var(--bdr)"}}>
+          <div className="lh-cell" style={{textAlign:"center"}}>GRD</div><div className="lh-cell" style={{textAlign:"center"}}>TOT</div><div className="lh-cell" style={{textAlign:"center"}}>LEFT</div>
+        </div>
+      </div>
       {st.length===0?<div className="ey"><p>No players registered yet.</p></div>:st.map((s,i)=>{
         const isFirst=i===0&&n>1;
         const isToilet=s.un===toiletBowlUser;
-        const pending=getPending(s.un);
-        return <div key={s.un} className={cn("lr",isFirst&&"top1",isToilet&&"topL")}>
-          <div className={cn("lrk",isFirst&&"p1",isToilet&&"pL")}>{i+1}</div>
-          <div className="lnm">{getUserDisplay(s.ud)}{!s.full&&s.rW>0?<span style={{fontFamily:"var(--fm)",fontSize:8,color:"var(--red)",marginLeft:4}}>INELIGIBLE</span>:""}</div>
-          <div className="lpt">{s.pts}</div><div className="lrc">{s.w}-{s.l}-{s.p}</div>
-          <div className="lst" style={{fontFamily:"var(--fm)",fontSize:10,color:pending>0?"var(--navy)":"var(--t5)",fontWeight:pending>0?700:400}}>{pending>0?pending:"—"}</div>
+        const remaining=s.totalPicks-s.graded;
+        return <div key={s.un} style={{display:"grid",gridTemplateColumns:"1fr auto",gap:0,borderBottom:"1px solid var(--bdr)"}}>
+          <div className={cn("lr-left",isFirst&&"top1",isToilet&&"topL")} style={{display:"grid",gridTemplateColumns:"30px 1fr 42px 64px",padding:"11px 12px",gap:6,alignItems:"center"}}>
+            <div className={cn("lrk",isFirst&&"p1",isToilet&&"pL")}>{i+1}</div>
+            <div className="lnm">{getUserDisplay(s.ud)}{!s.full&&s.rW>0?<span style={{fontFamily:"var(--fm)",fontSize:8,color:"var(--red)",marginLeft:4}}>INELIGIBLE</span>:""}</div>
+            <div className="lpt">{s.pts}</div><div className="lrc">{s.w}-{s.l}-{s.p}</div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"40px 40px 40px",padding:"11px 8px",gap:4,alignItems:"center",background:"var(--bg3)",borderLeft:"2px solid var(--bdr)"}}>
+            <div style={{textAlign:"center",fontFamily:"var(--fm)",fontSize:11,color:"var(--t3)",fontWeight:600}}>{s.graded}</div>
+            <div style={{textAlign:"center",fontFamily:"var(--fm)",fontSize:11,color:"var(--t4)"}}>{s.totalPicks}</div>
+            <div style={{textAlign:"center",fontFamily:"var(--fm)",fontSize:11,fontWeight:700,color:remaining>0?"var(--navy)":"var(--t5)"}}>{remaining}</div>
+          </div>
         </div>})}
     </div>
     <div style={{marginTop:8,fontSize:9,color:"var(--t5)",fontFamily:"var(--fm)",textAlign:"center",lineHeight:1.8}}>
-      LIVE = Picks pending results &middot; Tiebreaker: most wins &middot; INELIGIBLE = missed a round (no last place payout)
+      GRD = Graded (W+L+P) &middot; TOT = Total picks submitted &middot; LEFT = Remaining ungraded &middot; Tiebreaker: most wins
     </div>
   </div>);
 }
