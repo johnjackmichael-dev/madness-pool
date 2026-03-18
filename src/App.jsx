@@ -660,7 +660,16 @@ function MakePicks({user,games,userPicks,setUserPicks,showToast}){
 function ViewPicks({allPicks,users,games,allResults}){
   const[sr,setSr]=useState(()=>{const m=getMostRecentLockedRound(games);return m?m.id:ROUNDS[0].id});
   const rGames=(games||[]).filter(g=>g.roundId===sr).sort((a,b)=>{if(!a.tipTime)return 1;if(!b.tipTime)return -1;return new Date(a.tipTime)-new Date(b.tipTime)});
-  const players=Object.entries(users).filter(([u])=>u!==COMMISSIONER_USER);
+  const rawPlayers=Object.entries(users).filter(([u])=>u!==COMMISSIONER_USER);
+  // Sort by standings order: points desc, then wins desc
+  const players=[...rawPlayers].sort(([unA],[unB])=>{
+    const score=(un)=>{let w=0,p=0;const up=allPicks[un]||{};
+      ROUNDS.forEach(r=>{const rp=migratePicks(up[r.id]||{});
+        Object.entries(rp).forEach(([pk,pv])=>{const res=getPickResult(allResults,r.id,pk,pv);if(res==="win")w++;else if(res==="push")p++})});
+      return{pts:w+p*.5,w}};
+    const a=score(unA),b=score(unB);
+    return b.pts-a.pts||b.w-a.w;
+  });
   // Only show tipped games on the board
   const tippedGames=rGames.filter(g=>isGameTipped(g));
   const hiddenGames=rGames.filter(g=>!isGameTipped(g));
@@ -673,10 +682,10 @@ function ViewPicks({allPicks,users,games,allResults}){
     tippedGames.length===0?<div className="ey"><p>No games have tipped yet in this round.</p></div>:
     <div className="crd" style={{padding:0,overflow:"hidden"}}>
       <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-        <table style={{borderCollapse:"collapse",width:"100%",minWidth:tippedGames.length*52+160}}>
+        <table style={{borderCollapse:"collapse",width:"100%",minWidth:tippedGames.length*52+130}}>
           <thead>
             <tr style={{borderBottom:"2px solid var(--bdr)"}}>
-              <th style={{position:"sticky",left:0,background:"var(--bg)",zIndex:2,padding:"10px 12px",textAlign:"left",fontFamily:"var(--fm)",fontSize:9,color:"var(--t4)",letterSpacing:1.5,fontWeight:700,borderRight:"2px solid var(--bdr)",minWidth:160}}>PLAYER</th>
+              <th style={{position:"sticky",left:0,background:"var(--bg)",zIndex:2,padding:"8px 8px",textAlign:"left",fontFamily:"var(--fm)",fontSize:8,color:"var(--t4)",letterSpacing:1.5,fontWeight:700,borderRight:"2px solid var(--bdr)",minWidth:110,maxWidth:130}}>PLAYER</th>
               {tippedGames.map(g=>{
                 const s1=parseInt(g.seed1)||99,s2=parseInt(g.seed2)||99;
                 return <th key={g.id} style={{padding:"6px 2px",textAlign:"center",borderRight:"1px solid var(--bdr)",width:48}}>
@@ -692,7 +701,7 @@ function ViewPicks({allPicks,users,games,allResults}){
             {players.map(([un,ud])=>{
               const playerPicks=migratePicks((allPicks[un]||{})[sr]||{});
               return <tr key={un} style={{borderBottom:"1px solid var(--bdr)"}}>
-                <td style={{position:"sticky",left:0,background:"var(--bg)",zIndex:1,padding:"8px 12px",fontWeight:600,fontSize:11,color:"var(--t2)",borderRight:"2px solid var(--bdr)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:160}}>{getUserDisplay(ud)}</td>
+                <td style={{position:"sticky",left:0,background:"var(--bg)",zIndex:1,padding:"6px 8px",fontWeight:600,fontSize:10,color:"var(--t2)",borderRight:"2px solid var(--bdr)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:130}}>{getUserDisplay(ud)}</td>
                 {tippedGames.map(g=>{
                   const ats=getAts(playerPicks,g.id);
                   const ou=getOu(playerPicks,g.id);
