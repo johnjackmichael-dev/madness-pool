@@ -934,17 +934,30 @@ function Commish({games,setGames,allResults,setAllResults,allPicks,setAllPicks,u
       {editUser?<>
         <div className="fld"><label className="lbl">Round</label><select className="inp" value={editRound} onChange={e=>setEditRound(e.target.value)}>
           {ROUNDS.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}</select></div>
-        {(()=>{const userP=(allPicks[editUser]||{})[editRound]||{};const roundGames=(games||[]).filter(g=>g.roundId===editRound);const round=ROUNDS.find(r=>r.id===editRound);
-          return <div className="crd"><div className="crd-t">{getUserDisplay(users[editUser])} — {round.name}<span className="bdg bdg-navy">{Object.keys(userP).length}/{round.requiredPicks}</span>
-            {Object.keys(userP).length>0&&<button className="btn btn-d btn-sm" style={{marginLeft:"auto"}} onClick={()=>clearUserPicks(editUser,editRound)}>CLEAR ALL</button>}</div>
+        {(()=>{const userP=migratePicks((allPicks[editUser]||{})[editRound]||{});const roundGames=(games||[]).filter(g=>g.roundId===editRound);const round=ROUNDS.find(r=>r.id===editRound);
+          return <div className="crd"><div className="crd-t">{getUserDisplay(users[editUser])} — {round.name}<span className="bdg bdg-navy">{countPicks(userP)}/{round.requiredPicks}</span>
+            {countPicks(userP)>0&&<button className="btn btn-d btn-sm" style={{marginLeft:"auto"}} onClick={()=>clearUserPicks(editUser,editRound)}>CLEAR ALL</button>}</div>
             {roundGames.length===0?<div style={{color:"var(--t4)",fontSize:12,fontFamily:"var(--fm)"}}>No games in this round.</div>:
-            roundGames.map(g=><div key={g.id} style={{padding:"10px 0",borderBottom:"1px solid var(--bdr)"}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                <Logo name={g.team1} size={20}/><span style={{fontWeight:700,fontSize:12,letterSpacing:.5,textTransform:"uppercase"}}>{g.team1} vs {g.team2}</span><Logo name={g.team2} size={20}/>
+            roundGames.map(g=>{
+              const atsKey=`${g.id}_ats`, ouKey=`${g.id}_ou`;
+              const atsPick=userP[atsKey]||"", ouPick=userP[ouKey]||"";
+              return <div key={g.id} style={{padding:"12px 0",borderBottom:"1px solid var(--bdr)"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                <Logo name={g.team1} size={22}/><span style={{fontWeight:700,fontSize:13,letterSpacing:.5,textTransform:"uppercase"}}>{g.team1} vs {g.team2}</span><Logo name={g.team2} size={22}/>
                 <span style={{fontFamily:"var(--fm)",fontSize:10,color:"var(--t4)",marginLeft:"auto"}}>{g.spread||"PK"} / O/U {g.total||"–"}</span></div>
-              <select className="inp" style={{fontSize:12}} value={userP[g.id]||""} onChange={e=>editUserPick(editUser,editRound,g.id,e.target.value)}>
-                <option value="">No pick</option><option value="team1">{g.team1} {g.spread||"PK"}</option><option value="team2">{g.team2} {spread2(g.spread)}</option>
-                <option value="over">Over {g.total||""}</option><option value="under">Under {g.total||""}</option></select></div>)}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                <div>
+                  <div style={{fontFamily:"var(--fm)",fontSize:10,color:"var(--t3)",marginBottom:4,fontWeight:600}}>SPREAD</div>
+                  <select className="inp" style={{fontSize:12}} value={atsPick} onChange={e=>editUserPick(editUser,editRound,atsKey,e.target.value)}>
+                    <option value="">No pick</option><option value="team1">{g.team1} {g.spread||"PK"}</option><option value="team2">{g.team2} {spread2(g.spread)}</option></select>
+                </div>
+                <div>
+                  <div style={{fontFamily:"var(--fm)",fontSize:10,color:"var(--t3)",marginBottom:4,fontWeight:600}}>TOTAL</div>
+                  <select className="inp" style={{fontSize:12}} value={ouPick} onChange={e=>editUserPick(editUser,editRound,ouKey,e.target.value)}>
+                    <option value="">No pick</option><option value="over">Over {g.total||""}</option><option value="under">Under {g.total||""}</option></select>
+                </div>
+              </div>
+            </div>})}
           </div>})()}
       </>:<div className="ey"><p>Select a player above to view and edit their picks.</p></div>}
     </>}
