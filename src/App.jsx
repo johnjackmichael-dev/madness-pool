@@ -229,9 +229,9 @@ body,#root{background:var(--bg2);color:var(--t1);font-family:var(--fd);min-heigh
 .cd-bar.urg .cd-timer{color:#ef4444}
 @keyframes cdP{0%,100%{background:linear-gradient(90deg,rgba(220,38,38,0.2),var(--navy2) 70%)}50%{background:linear-gradient(90deg,rgba(220,38,38,0.35),var(--navy2) 70%)}}
 .cd-left{display:flex;flex-direction:column;gap:2px}
-.cd-round{font-weight:800;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(255,255,255,0.8)}
-.cd-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.cd-lock-time{font-family:var(--fm);font-size:9px;color:rgba(255,255,255,0.3);letter-spacing:.5px}
+.cd-round{font-weight:800;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;color:#fff}
+.cd-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:3px}
+.cd-lock-time{font-family:var(--fm);font-size:10px;color:rgba(255,255,255,0.7);letter-spacing:.5px;font-weight:600}
 .cd-timer{font-family:var(--fm);font-weight:700;font-size:28px;color:var(--g2);letter-spacing:2px;line-height:1}
 .cd-locked{color:rgba(255,255,255,0.3);font-family:var(--fm);font-size:13px;letter-spacing:2px;font-weight:600}
 
