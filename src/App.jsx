@@ -400,6 +400,7 @@ select.inp{cursor:pointer;appearance:none;background-image:url("data:image/svg+x
   .stabs{flex-wrap:wrap}.stab{font-size:9px;padding:6px 8px}
   .lr-left{grid-template-columns:22px 1fr 34px 50px !important}
   .lh-cell{font-size:8px !important}
+  .lnm{font-size:10px;min-width:100px}
 }
 `;
 
@@ -657,7 +658,7 @@ function MakePicks({user,games,userPicks,setUserPicks,showToast}){
 }
 
 // ─── View Picks (The Board) ──────────────────────────────────────────────────
-function ViewPicks({allPicks,users,games,allResults}){
+function ViewPicks({allPicks,users,games,allResults,currentUser}){
   const[sr,setSr]=useState(()=>{const m=getMostRecentLockedRound(games);return m?m.id:ROUNDS[0].id});
   const rGames=(games||[]).filter(g=>g.roundId===sr).sort((a,b)=>{if(!a.tipTime)return 1;if(!b.tipTime)return -1;return new Date(a.tipTime)-new Date(b.tipTime)});
   const rawPlayers=Object.entries(users).filter(([u])=>u!==COMMISSIONER_USER);
@@ -700,8 +701,8 @@ function ViewPicks({allPicks,users,games,allResults}){
           <tbody>
             {players.map(([un,ud])=>{
               const playerPicks=migratePicks((allPicks[un]||{})[sr]||{});
-              return <tr key={un} style={{borderBottom:"1px solid var(--bdr)"}}>
-                <td style={{position:"sticky",left:0,background:"var(--bg)",zIndex:1,padding:"6px 8px",fontWeight:600,fontSize:10,color:"var(--t2)",borderRight:"2px solid var(--bdr)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:130}}>{getUserDisplay(ud)}</td>
+              return <tr key={un} style={{borderBottom:"1px solid var(--bdr)",background:un===currentUser?"rgba(37,99,235,0.06)":"transparent"}}>
+                <td style={{position:"sticky",left:0,background:un===currentUser?"rgba(37,99,235,0.06)":"var(--bg)",zIndex:1,padding:"6px 8px",fontWeight:un===currentUser?800:600,fontSize:10,color:un===currentUser?"var(--blu)":"var(--t2)",borderRight:"2px solid var(--bdr)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:130}}>{getUserDisplay(ud)}{un===currentUser?" \u2190":""}</td>
                 {tippedGames.map(g=>{
                   const ats=getAts(playerPicks,g.id);
                   const ou=getOu(playerPicks,g.id);
@@ -736,13 +737,15 @@ function ViewPicks({allPicks,users,games,allResults}){
 }
 
 // ─── Standings ───────────────────────────────────────────────────────────────
-function Standings({allPicks,allResults,users,games}){
+function Standings({allPicks,allResults,users,games,currentUser}){
   const players=Object.entries(users).filter(([u])=>u!==COMMISSIONER_USER);
   // Pool-wide: total picks available = sum of requiredPicks for rounds that have games posted
   const totalAvailable=ROUNDS.reduce((sum,r)=>{
     const hasGames=(games||[]).some(g=>g.roundId===r.id);
     return sum+(hasGames?r.requiredPicks:0);
   },0);
+  // Group totals
+  let groupW=0,groupL=0,groupP=0;
   const st=players.map(([un,ud])=>{let w=0,l=0,p=0,rS=0,rW=0;const up=allPicks[un]||{};
     ROUNDS.forEach(r=>{
       const rp=migratePicks(up[r.id]||{});
@@ -756,9 +759,12 @@ function Standings({allPicks,allResults,users,games}){
         if(res==="win")w++;else if(res==="push")p++;else if(res==="loss")l++;
       });
     });
+    groupW+=w;groupL+=l;groupP+=p;
     const graded=w+l+p;
     return{un,ud,pts:w+p*.5,w,l,p,rS,rW,full:rW===0||rS>=rW,graded};
   }).sort((a,b)=>b.pts-a.pts||b.w-a.w);
+  const groupTotal=groupW+groupL+groupP;
+  const groupWinPct=groupTotal>0?((groupW+groupP*0.5)/groupTotal*100):0;
   const n=st.length,pot=n*PAYOUT_INFO.buyIn;
   const remaining=pot-25;
   const payouts=[
@@ -772,6 +778,16 @@ function Standings({allPicks,allResults,users,games}){
   const toiletBowlUser=eligiblePlayers.length>1?eligiblePlayers[eligiblePlayers.length-1].un:null;
 
   return(<div className="an"><div className="st">STANDINGS</div>
+    {groupTotal>0&&<div className="crd" style={{marginBottom:14,padding:"16px 22px",display:"flex",alignItems:"center",justifyContent:"space-between",background:groupWinPct>=50?"rgba(22,163,74,0.06)":"rgba(220,38,38,0.06)",border:groupWinPct>=50?"1px solid rgba(22,163,74,0.2)":"1px solid rgba(220,38,38,0.15)"}}>
+      <div>
+        <div style={{fontFamily:"var(--fm)",fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:groupWinPct>=50?"var(--g)":"var(--red)",marginBottom:4}}>GROUP RECORD</div>
+        <div style={{fontSize:20,fontWeight:900,color:"var(--t1)"}}>{groupW}-{groupL}-{groupP}</div>
+      </div>
+      <div style={{textAlign:"right"}}>
+        <div style={{fontFamily:"var(--fm)",fontSize:10,fontWeight:700,letterSpacing:1.5,textTransform:"uppercase",color:"var(--t4)",marginBottom:4}}>WIN %</div>
+        <div style={{fontSize:20,fontWeight:900,color:groupWinPct>=50?"var(--g)":"var(--red)"}}>{groupWinPct.toFixed(1)}%</div>
+      </div>
+    </div>}
     <div className="crd" style={{marginBottom:18}}>
       <div className="crd-t">PRIZE POOL <span className="bdg bdg-navy">{n} PLAYERS / ${pot}</span></div>
       <div className="pay-grid">
@@ -799,11 +815,12 @@ function Standings({allPicks,allResults,users,games}){
       {st.length===0?<div className="ey"><p>No players registered yet.</p></div>:st.map((s,i)=>{
         const isFirst=i===0&&n>1;
         const isToilet=s.un===toiletBowlUser;
+        const isMe=s.un===currentUser;
         const remaining=totalAvailable-s.graded;
-        return <div key={s.un} style={{display:"grid",gridTemplateColumns:"1fr auto",gap:0,borderBottom:"1px solid var(--bdr)"}}>
-          <div className={cn("lr-left",isFirst&&"top1",isToilet&&"topL")} style={{display:"grid",gridTemplateColumns:"30px 1fr 42px 64px",padding:"11px 12px",gap:6,alignItems:"center"}}>
-            <div className={cn("lrk",isFirst&&"p1",isToilet&&"pL")}>{i+1}</div>
-            <div className="lnm">{getUserDisplay(s.ud)}{!s.full&&s.rW>0?<span style={{fontFamily:"var(--fm)",fontSize:8,color:"var(--red)",marginLeft:4}}>INELIGIBLE</span>:""}</div>
+        return <div key={s.un} style={{display:"grid",gridTemplateColumns:"1fr auto",gap:0,borderBottom:"1px solid var(--bdr)",background:isMe?"rgba(37,99,235,0.06)":"transparent"}}>
+          <div className={cn("lr-left",isFirst&&"top1",isToilet&&"topL")} style={{display:"grid",gridTemplateColumns:"30px 1fr 42px 64px",padding:"11px 12px",gap:6,alignItems:"center",background:isMe?"rgba(37,99,235,0.06)":"transparent"}}>
+            <div className={cn("lrk",isFirst&&"p1",isToilet&&"pL")} style={isMe&&!isFirst&&!isToilet?{color:"var(--blu)"}:{}}>{i+1}</div>
+            <div className="lnm" style={isMe?{color:"var(--blu)",fontWeight:800}:{}}>{getUserDisplay(s.ud)}{isMe&&<span style={{fontFamily:"var(--fm)",fontSize:7,color:"var(--blu)",marginLeft:4}}>YOU</span>}{!s.full&&s.rW>0?<span style={{fontFamily:"var(--fm)",fontSize:8,color:"var(--red)",marginLeft:4}}>INELIGIBLE</span>:""}</div>
             <div className="lpt">{s.pts}</div><div className="lrc">{s.w}-{s.l}-{s.p}</div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"40px 40px 40px",padding:"11px 8px",gap:4,alignItems:"center",background:"var(--bg3)",borderLeft:"2px solid var(--bdr)"}}>
@@ -1226,8 +1243,8 @@ export default function App(){
     </nav>
     <div className="main">{!loaded?<div className="ey ld">Loading pool data...</div>:<>
       {activeTab==="picks"&&!isCom&&<MakePicks user={user} games={games} userPicks={userPicks} setUserPicks={p=>{setUserPicks(p);setAllPicks({...allPicks,[user]:p})}} showToast={showToast}/>}
-      {activeTab==="standings"&&<Standings allPicks={allPicks} allResults={allResults} users={users} games={games}/>}
-      {activeTab==="board"&&<ViewPicks allPicks={allPicks} users={users} games={games} allResults={allResults}/>}
+      {activeTab==="standings"&&<Standings allPicks={allPicks} allResults={allResults} users={users} games={games} currentUser={user}/>}
+      {activeTab==="board"&&<ViewPicks allPicks={allPicks} users={users} games={games} allResults={allResults} currentUser={user}/>}
       {activeTab==="history"&&!isCom&&<History user={user} games={games} userPicks={userPicks} allResults={allResults}/>}
       {activeTab==="talk"&&<TrashTalk user={user} userData={userData}/>}
       {activeTab==="commish"&&isCom&&<Commish games={games} setGames={setGames} allResults={allResults} setAllResults={setAllResults} allPicks={allPicks} setAllPicks={setAllPicks} users={users} setUsers={setUsers} showToast={showToast} loadData={loadData}/>}
