@@ -592,8 +592,66 @@ function MakePicks({user,games,userPicks,setUserPicks,showToast}){
     (()=>{
       const openGames=rGames.filter(g=>!isGameTipped(g));
       const tippedGames=rGames.filter(g=>isGameTipped(g));
-      return <>{openGames.length>0&&<>
-        {tippedGames.length>0&&<div style={{fontFamily:"var(--fm)",fontSize:10,fontWeight:700,letterSpacing:1.5,color:"var(--g)",textTransform:"uppercase",margin:"16px 0 8px",padding:"6px 0",borderBottom:"1px solid var(--bdr)"}}>OPEN — PICK BEFORE TIP-OFF</div>}
+      const allGamesWithPicks=rGames.filter(g=>{const a=getAts(picks,g.id),o=getOu(picks,g.id);return a||o});
+      return <>
+      {/* ── MY PICKS SUMMARY ── */}
+      {allGamesWithPicks.length>0&&<div className="crd" style={{padding:0,overflow:"hidden",marginBottom:16}}>
+        <div style={{padding:"14px 16px 8px",fontFamily:"var(--fm)",fontSize:10,fontWeight:700,letterSpacing:1.5,color:"var(--t3)",textTransform:"uppercase"}}>MY PICKS — {round.name}</div>
+        <table style={{borderCollapse:"collapse",width:"100%"}}>
+          <thead>
+            <tr style={{borderBottom:"1px solid var(--bdr)"}}>
+              <th style={{padding:"6px 12px",textAlign:"left",fontFamily:"var(--fm)",fontSize:8,color:"var(--t4)",letterSpacing:1,fontWeight:700}}>MATCHUP</th>
+              <th style={{padding:"6px 8px",textAlign:"center",fontFamily:"var(--fm)",fontSize:8,color:"var(--t4)",letterSpacing:1,fontWeight:700,width:50}}>SPREAD</th>
+              <th style={{padding:"6px 8px",textAlign:"center",fontFamily:"var(--fm)",fontSize:8,color:"var(--t4)",letterSpacing:1,fontWeight:700,width:50}}>O/U</th>
+              <th style={{padding:"6px 8px",textAlign:"center",fontFamily:"var(--fm)",fontSize:8,color:"var(--t4)",letterSpacing:1,fontWeight:700,width:44}}>STATUS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rGames.map(g=>{
+              const ats=getAts(picks,g.id),ou=getOu(picks,g.id);
+              if(!ats&&!ou) return null;
+              const tipped=isGameTipped(g);
+              const atsResult=ats?getPickResult({},round.id,`${g.id}_ats`,ats):null;
+              const ouResult=ou?getPickResult({},round.id,`${g.id}_ou`,ou):null;
+              const atsTeamName=ats==="team1"?g.team1:ats==="team2"?g.team2:null;
+              const s1=parseInt(g.seed1)||99,s2=parseInt(g.seed2)||99;
+              return <tr key={g.id} style={{borderBottom:"1px solid var(--bdr)",opacity:tipped?1:0.7}}>
+                <td style={{padding:"8px 12px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <Logo name={s1<s2?g.team1:g.team2} size={16}/>
+                    <span style={{fontFamily:"var(--fm)",fontSize:9,color:"var(--t4)"}}>vs</span>
+                    <Logo name={s1<s2?g.team2:g.team1} size={16}/>
+                    {!tipped&&<span style={{fontFamily:"var(--fm)",fontSize:8,color:"var(--g)",marginLeft:4}}>OPEN</span>}
+                    {tipped&&<span style={{fontFamily:"var(--fm)",fontSize:8,color:"var(--t4)",marginLeft:4}}>LOCKED</span>}
+                  </div>
+                </td>
+                <td style={{padding:"8px 4px",textAlign:"center"}}>
+                  {ats?<div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:32,height:32,borderRadius:5,background:"var(--bg3)",border:"1px solid var(--bdr)"}}>
+                    <Logo name={atsTeamName} size={22}/>
+                  </div>:<span style={{color:"var(--t5)",fontSize:9}}>—</span>}
+                </td>
+                <td style={{padding:"8px 4px",textAlign:"center"}}>
+                  {ou?<div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:32,height:22,borderRadius:4,background:"var(--bg3)",border:"1px solid var(--bdr)",fontFamily:"var(--fm)",fontSize:12,fontWeight:800,color:"var(--t3)"}}>
+                    {ou==="over"?"\u2191":"\u2193"}
+                  </div>:<span style={{color:"var(--t5)",fontSize:9}}>—</span>}
+                </td>
+                <td style={{padding:"8px 4px",textAlign:"center"}}>
+                  {tipped?<span className="bdg bdg-navy" style={{fontSize:8}}>IN PLAY</span>
+                  :<span className="bdg bdg-g" style={{fontSize:8}}>SET</span>}
+                </td>
+              </tr>})}
+          </tbody>
+        </table>
+        <div style={{padding:"8px 16px",fontFamily:"var(--fm)",fontSize:9,color:"var(--t4)",background:"var(--bg3)",borderTop:"1px solid var(--bdr)",textAlign:"center"}}>
+          {pc} of {round.requiredPicks} picks selected {done&&" \u2713"}
+        </div>
+      </div>}
+
+      {/* ── OPEN GAMES TO PICK ── */}
+      {openGames.length>0&&<>
+        <div style={{fontFamily:"var(--fm)",fontSize:11,fontWeight:700,letterSpacing:1.5,color:"var(--navy)",textTransform:"uppercase",margin:"8px 0 12px",padding:"8px 0",borderBottom:"2px solid var(--bdr)"}}>
+          {tippedGames.length>0?"OPEN GAMES — PICK BEFORE TIP-OFF":"GAMES"}
+        </div>
         {openGames.map(g=>{
       const ats=getAts(picks,g.id), ou=getOu(picks,g.id);
       const hasPick=ats||ou;
@@ -605,13 +663,12 @@ function MakePicks({user,games,userPicks,setUserPicks,showToast}){
       const awaySeed=s1>s2?g.seed1:g.seed2, homeSeed=s1>s2?g.seed2:g.seed1;
       const displaySpread=g.spread||"PK";
       const gameCd=g.tipTime?countdownTo(g.tipTime):null;
-      return (<div key={g.id} className={cn("gm",hasPick&&"sel",tipped&&"lk")}>
+      return (<div key={g.id} className={cn("gm",hasPick&&"sel")}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-          <div style={{fontFamily:"var(--fm)",fontSize:10,color:tipped?"var(--red)":"var(--t4)"}}>
+          <div style={{fontFamily:"var(--fm)",fontSize:10,color:"var(--t4)"}}>
             {g.tipTime?fmtTime(g.tipTime):"Tip time TBD"}
           </div>
-          {tipped&&<span className="bdg bdg-r" style={{fontSize:9}}>LOCKED</span>}
-          {!tipped&&gameCd&&<span style={{fontFamily:"var(--fm)",fontSize:10,fontWeight:700,color:gameCd.urgent?"var(--red)":gameCd.warning?"var(--ylw)":"var(--g)"}}>{gameCd.text}</span>}
+          {gameCd&&<span style={{fontFamily:"var(--fm)",fontSize:10,fontWeight:700,color:gameCd.urgent?"var(--red)":gameCd.warning?"var(--ylw)":"var(--g)"}}>{gameCd.text}</span>}
         </div>
         <div className="gm-mu"><div className="gm-ts">
           <div className="gm-t away"><span className="gm-sd">{awaySeed}</span><Logo name={awayName} size={36}/><span>{awayName}</span></div>
@@ -620,39 +677,22 @@ function MakePicks({user,games,userPicks,setUserPicks,showToast}){
         <div className="gm-divider"/>
         <div className="pk-row-label">SPREAD {ats&&<span style={{color:"var(--g)",marginLeft:6}}>PICKED</span>}</div>
         <div className="pk-row">
-          <button className={cn("pk",ats==="team1"&&"on")} onClick={()=>toggleAts(g.id,g,"team1")} disabled={tipped||(!canPickAts&&ats!=="team1")}>{g.team1} {g.spread||"PK"}</button>
-          <button className={cn("pk",ats==="team2"&&"on")} onClick={()=>toggleAts(g.id,g,"team2")} disabled={tipped||(!canPickAts&&ats!=="team2")}>{g.team2} {spread2(g.spread)}</button>
+          <button className={cn("pk",ats==="team1"&&"on")} onClick={()=>toggleAts(g.id,g,"team1")} disabled={!canPickAts&&ats!=="team1"}>{g.team1} {g.spread||"PK"}</button>
+          <button className={cn("pk",ats==="team2"&&"on")} onClick={()=>toggleAts(g.id,g,"team2")} disabled={!canPickAts&&ats!=="team2"}>{g.team2} {spread2(g.spread)}</button>
         </div>
         <div className="pk-row-label">TOTAL {ou&&<span style={{color:"var(--g)",marginLeft:6}}>PICKED</span>}</div>
         <div className="pk-row">
-          <button className={cn("pk",ou==="over"&&"on")} onClick={()=>toggleOu(g.id,g,"over")} disabled={tipped||(!canPickOu&&ou!=="over")}>Over {g.total||""}</button>
-          <button className={cn("pk",ou==="under"&&"on")} onClick={()=>toggleOu(g.id,g,"under")} disabled={tipped||(!canPickOu&&ou!=="under")}>Under {g.total||""}</button>
+          <button className={cn("pk",ou==="over"&&"on")} onClick={()=>toggleOu(g.id,g,"over")} disabled={!canPickOu&&ou!=="over"}>Over {g.total||""}</button>
+          <button className={cn("pk",ou==="under"&&"on")} onClick={()=>toggleOu(g.id,g,"under")} disabled={!canPickOu&&ou!=="under"}>Under {g.total||""}</button>
         </div>
-        {atMax&&!ats&&!ou&&!tipped&&<div className="pk-full">All {round.requiredPicks} picks used — deselect one to pick this game</div>}
+        {atMax&&!ats&&!ou&&<div className="pk-full">All {round.requiredPicks} picks used — deselect one to pick this game</div>}
       </div>);})}
       </>}
-      {tippedGames.length>0&&<>
-        <div style={{fontFamily:"var(--fm)",fontSize:10,fontWeight:700,letterSpacing:1.5,color:"var(--t4)",textTransform:"uppercase",margin:"20px 0 8px",padding:"6px 0",borderBottom:"1px solid var(--bdr)"}}>LOCKED — GAME{tippedGames.length>1?"S":""} TIPPED OFF ({tippedGames.length})</div>
-        {tippedGames.map(g=>{
-      const ats=getAts(picks,g.id), ou=getOu(picks,g.id);
-      const hasPick=ats||ou;
-      return (<div key={g.id} className="gm lk">
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-          <div style={{fontFamily:"var(--fm)",fontSize:10,color:"var(--red)"}}>{fmtTime(g.tipTime)}</div>
-          <span className="bdg bdg-r" style={{fontSize:9}}>LOCKED</span>
-        </div>
-        <div className="gm-mu"><div className="gm-ts">
-          <div className="gm-t away"><span className="gm-sd">{parseInt(g.seed1)||99>parseInt(g.seed2)||99?g.seed1:g.seed2}</span><Logo name={parseInt(g.seed1)||99>parseInt(g.seed2)||99?g.team1:g.team2} size={28}/><span>{parseInt(g.seed1)||99>parseInt(g.seed2)||99?g.team1:g.team2}</span></div>
-          <div className="gm-t"><span className="gm-sd">{parseInt(g.seed1)||99>parseInt(g.seed2)||99?g.seed2:g.seed1}</span><Logo name={parseInt(g.seed1)||99>parseInt(g.seed2)||99?g.team2:g.team1} size={28}/><span>{parseInt(g.seed1)||99>parseInt(g.seed2)||99?g.team2:g.team1}</span></div>
-        </div></div>
-        {hasPick&&<div style={{fontFamily:"var(--fm)",fontSize:10,color:"var(--t3)",padding:"6px 10px",background:"var(--bg3)",borderRadius:4}}>
-          {ats&&<span>SPREAD: {ats==="team1"?g.team1:g.team2} {ats==="team1"?g.spread||"PK":spread2(g.spread)}</span>}
-          {ats&&ou&&<span> &middot; </span>}
-          {ou&&<span>TOTAL: {ou==="over"?"Over":"Under"} {g.total||""}</span>}
-        </div>}
-        {!hasPick&&<div style={{fontFamily:"var(--fm)",fontSize:10,color:"var(--red)",padding:"6px 10px",background:"var(--rg)",borderRadius:4}}>No pick submitted</div>}
-      </div>);})}
-      </>}
+
+      {/* All tipped, no open games left */}
+      {openGames.length===0&&tippedGames.length>0&&!done&&<div className="missed">
+        All games have tipped. You submitted {pc}/{round.requiredPicks} picks.
+      </div>}
       </>})()}
   </div>);
 }
