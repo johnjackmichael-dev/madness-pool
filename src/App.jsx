@@ -970,6 +970,18 @@ function Commish({games,setGames,allResults,setAllResults,allPicks,setAllPicks,u
     setUsers(freshUsers);
     showToast(freshUsers[un].paid?"Marked as paid":"Marked as unpaid")};
 
+  const[resetPwUser,setResetPwUser]=useState(null);
+  const[newPw,setNewPw]=useState("");
+  const resetPassword=async(un)=>{
+    if(!newPw.trim()||newPw.trim().length<3){showToast("Password must be 3+ characters");return}
+    const freshUsers=(await S.getShared("pool:users"))||{};
+    if(!freshUsers[un])return;
+    freshUsers[un].password=simpleHash(newPw.trim());
+    await S.setShared("pool:users",freshUsers);
+    setUsers(freshUsers);
+    setResetPwUser(null);setNewPw("");
+    showToast(`Password reset for ${un}`)};
+
   return (<div className="an"><div className="st">COMMISSIONER PANEL</div>
     <div className="stabs">
       <button className={cn("stab",subTab==="games"&&"on")} onClick={()=>setSubTab("games")}>GAMES</button>
@@ -1068,16 +1080,24 @@ function Commish({games,setGames,allResults,setAllResults,allPicks,setAllPicks,u
         </div>})()}
       {players.length===0?<div className="ey"><p>No players registered yet.</p></div>:
       players.map(([un,ud])=>{const up=allPicks[un]||{};const sub=ROUNDS.filter(r=>countPicks(migratePicks(up[r.id]||{}))===r.requiredPicks).length;
-        return <div key={un} className="um-row">
-          <div style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",flex:"0 0 auto"}} onClick={()=>togglePaid(un)}>
-            <div style={{width:22,height:22,borderRadius:4,border:ud.paid?"2px solid var(--g)":"2px solid var(--bdr2)",background:ud.paid?"var(--gg)":"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"var(--g)",fontWeight:800,transition:"all .15s"}}>
-              {ud.paid?"\u2713":""}
+        return <div key={un} style={{borderBottom:"1px solid var(--bdr)",padding:"10px 0"}}>
+          <div className="um-row" style={{borderBottom:"none",padding:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",flex:"0 0 auto"}} onClick={()=>togglePaid(un)}>
+              <div style={{width:22,height:22,borderRadius:4,border:ud.paid?"2px solid var(--g)":"2px solid var(--bdr2)",background:ud.paid?"var(--gg)":"var(--bg)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"var(--g)",fontWeight:800,transition:"all .15s"}}>
+                {ud.paid?"\u2713":""}
+              </div>
             </div>
+            <div className="um-name">{getUserDisplay(ud)}</div>
+            <div className="um-info">{ud.paid?<span style={{color:"var(--g)",fontWeight:700}}>PAID</span>:<span style={{color:"var(--red)",fontWeight:700}}>UNPAID</span>}</div>
+            <div className="um-info">{sub}/{ROUNDS.length} rds</div>
+            <button className="btn btn-gh btn-sm" onClick={()=>{setResetPwUser(resetPwUser===un?null:un);setNewPw("")}}>PW</button>
+            <button className="btn btn-d btn-sm" onClick={()=>removeUser(un)}>REMOVE</button>
           </div>
-          <div className="um-name">{getUserDisplay(ud)}</div>
-          <div className="um-info">{ud.paid?<span style={{color:"var(--g)",fontWeight:700}}>PAID</span>:<span style={{color:"var(--red)",fontWeight:700}}>UNPAID</span>}</div>
-          <div className="um-info">{sub}/{ROUNDS.length} rds</div>
-          <button className="btn btn-d btn-sm" onClick={()=>removeUser(un)}>REMOVE</button>
+          {resetPwUser===un&&<div style={{display:"flex",gap:8,marginTop:8,alignItems:"center"}}>
+            <input className="inp" style={{fontSize:12,padding:"8px 10px",flex:1}} type="text" placeholder="New password" value={newPw} onChange={e=>setNewPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&resetPassword(un)}/>
+            <button className="btn btn-navy btn-sm" onClick={()=>resetPassword(un)} disabled={!newPw.trim()}>RESET</button>
+            <button className="btn btn-gh btn-sm" onClick={()=>{setResetPwUser(null);setNewPw("")}}>CANCEL</button>
+          </div>}
         </div>})}
     </div>}
 
