@@ -701,8 +701,8 @@ function ViewPicks({allPicks,users,games,allResults,currentUser}){
           <tbody>
             {players.map(([un,ud])=>{
               const playerPicks=migratePicks((allPicks[un]||{})[sr]||{});
-              return <tr key={un} style={{borderBottom:"1px solid var(--bdr)",background:un===currentUser?"rgba(37,99,235,0.06)":"transparent"}}>
-                <td style={{position:"sticky",left:0,background:un===currentUser?"rgba(37,99,235,0.06)":"var(--bg)",zIndex:1,padding:"6px 8px",fontWeight:un===currentUser?800:600,fontSize:10,color:un===currentUser?"var(--blu)":"var(--t2)",borderRight:"2px solid var(--bdr)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:130}}>{getUserDisplay(ud)}{un===currentUser?" \u2190":""}</td>
+              return <tr key={un} style={{borderBottom:"1px solid var(--bdr)",background:un===currentUser?"#eef2ff":"transparent"}}>
+                <td style={{position:"sticky",left:0,background:un===currentUser?"#eef2ff":"#fff",zIndex:1,padding:"6px 8px",fontWeight:un===currentUser?800:600,fontSize:10,color:un===currentUser?"var(--blu)":"var(--t2)",borderRight:"2px solid var(--bdr)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:130}}>{getUserDisplay(ud)}{un===currentUser?" \u2190":""}</td>
                 {tippedGames.map(g=>{
                   const ats=getAts(playerPicks,g.id);
                   const ou=getOu(playerPicks,g.id);
@@ -803,32 +803,40 @@ function Standings({allPicks,allResults,users,games,currentUser}){
         3RD IS FLAT $25 &middot; REMAINING ${remaining>0?remaining:0} SPLITS 55/25/20 &middot; MUST SUBMIT 100% OF PICKS FOR LAST PLACE
       </div>
     </div>
-    <div className="crd"><div className="crd-t">LEADERBOARD</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:0,borderBottom:"2px solid var(--bdr)"}}>
-        <div style={{display:"grid",gridTemplateColumns:"30px 1fr 42px 64px",padding:"8px 12px",gap:6,alignItems:"center"}}>
-          <div className="lh-cell">#</div><div className="lh-cell">PLAYER</div><div className="lh-cell" style={{textAlign:"right"}}>PTS</div><div className="lh-cell" style={{textAlign:"right"}}>W-L-P</div>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"40px 40px 40px",padding:"8px 8px",gap:4,alignItems:"center",background:"var(--bg3)",borderLeft:"2px solid var(--bdr)"}}>
-          <div className="lh-cell" style={{textAlign:"center"}}>GRD</div><div className="lh-cell" style={{textAlign:"center"}}>TOT</div><div className="lh-cell" style={{textAlign:"center"}}>LEFT</div>
-        </div>
+    <div className="crd" style={{padding:0,overflow:"hidden"}}><div style={{padding:"16px 16px 0"}}><div className="crd-t">LEADERBOARD</div></div>
+      <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
+        <table style={{borderCollapse:"collapse",width:"100%",minWidth:480}}>
+          <thead>
+            <tr style={{borderBottom:"2px solid var(--bdr)"}}>
+              <th style={{padding:"8px 8px",textAlign:"center",fontFamily:"var(--fm)",fontSize:8,color:"var(--t4)",letterSpacing:1.5,fontWeight:700,width:28}}>#</th>
+              <th style={{padding:"8px 8px",textAlign:"left",fontFamily:"var(--fm)",fontSize:8,color:"var(--t4)",letterSpacing:1.5,fontWeight:700}}>PLAYER</th>
+              <th style={{padding:"8px 6px",textAlign:"right",fontFamily:"var(--fm)",fontSize:8,color:"var(--t4)",letterSpacing:1.5,fontWeight:700,width:36}}>PTS</th>
+              <th style={{padding:"8px 6px",textAlign:"right",fontFamily:"var(--fm)",fontSize:8,color:"var(--t4)",letterSpacing:1.5,fontWeight:700,width:56}}>W-L-P</th>
+              <th style={{padding:"8px 6px",textAlign:"center",fontFamily:"var(--fm)",fontSize:8,color:"var(--t4)",letterSpacing:1.5,fontWeight:700,width:36,background:"var(--bg3)",borderLeft:"2px solid var(--bdr)"}}>GRD</th>
+              <th style={{padding:"8px 6px",textAlign:"center",fontFamily:"var(--fm)",fontSize:8,color:"var(--t4)",letterSpacing:1.5,fontWeight:700,width:36,background:"var(--bg3)"}}>TOT</th>
+              <th style={{padding:"8px 6px",textAlign:"center",fontFamily:"var(--fm)",fontSize:8,color:"var(--t4)",letterSpacing:1.5,fontWeight:700,width:36,background:"var(--bg3)"}}>LEFT</th>
+            </tr>
+          </thead>
+          <tbody>
+            {st.length===0?<tr><td colSpan={7}><div className="ey"><p>No players registered yet.</p></div></td></tr>:st.map((s,i)=>{
+              const isFirst=i===0&&n>1;
+              const isToilet=s.un===toiletBowlUser;
+              const isMe=s.un===currentUser;
+              const rem=totalAvailable-s.graded;
+              return <tr key={s.un} style={{borderBottom:"1px solid var(--bdr)",background:isMe?"#eef2ff":isFirst?"rgba(22,163,74,.04)":isToilet?"var(--rg)":"transparent"}}>
+                <td style={{padding:"10px 8px",textAlign:"center",fontSize:18,fontWeight:900,color:isFirst?"var(--g)":isToilet?"var(--red)":isMe?"var(--blu)":"var(--t5)"}}>{i+1}</td>
+                <td style={{padding:"10px 8px",fontWeight:isMe?800:600,fontSize:12,color:isMe?"var(--blu)":"var(--t2)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:180}}>
+                  {getUserDisplay(s.ud)}{isMe&&<span style={{fontFamily:"var(--fm)",fontSize:7,color:"var(--blu)",marginLeft:4}}>YOU</span>}{!s.full&&s.rW>0&&<span style={{fontFamily:"var(--fm)",fontSize:7,color:"var(--red)",marginLeft:4}}>INELIGIBLE</span>}
+                </td>
+                <td style={{padding:"10px 6px",textAlign:"right",fontFamily:"var(--fm)",fontWeight:700,color:"var(--navy)",fontSize:14}}>{s.pts}</td>
+                <td style={{padding:"10px 6px",textAlign:"right",fontFamily:"var(--fm)",fontSize:10,color:"var(--t4)"}}>{s.w}-{s.l}-{s.p}</td>
+                <td style={{padding:"10px 6px",textAlign:"center",fontFamily:"var(--fm)",fontSize:11,color:"var(--t3)",fontWeight:600,background:"var(--bg3)",borderLeft:"2px solid var(--bdr)"}}>{s.graded}</td>
+                <td style={{padding:"10px 6px",textAlign:"center",fontFamily:"var(--fm)",fontSize:11,color:"var(--t4)",background:"var(--bg3)"}}>{totalAvailable}</td>
+                <td style={{padding:"10px 6px",textAlign:"center",fontFamily:"var(--fm)",fontSize:11,fontWeight:700,color:rem>0?"var(--navy)":"var(--t5)",background:"var(--bg3)"}}>{rem}</td>
+              </tr>})}
+          </tbody>
+        </table>
       </div>
-      {st.length===0?<div className="ey"><p>No players registered yet.</p></div>:st.map((s,i)=>{
-        const isFirst=i===0&&n>1;
-        const isToilet=s.un===toiletBowlUser;
-        const isMe=s.un===currentUser;
-        const remaining=totalAvailable-s.graded;
-        return <div key={s.un} style={{display:"grid",gridTemplateColumns:"1fr auto",gap:0,borderBottom:"1px solid var(--bdr)",background:isMe?"rgba(37,99,235,0.06)":"transparent"}}>
-          <div className={cn("lr-left",isFirst&&"top1",isToilet&&"topL")} style={{display:"grid",gridTemplateColumns:"30px 1fr 42px 64px",padding:"11px 12px",gap:6,alignItems:"center",background:isMe?"rgba(37,99,235,0.06)":"transparent"}}>
-            <div className={cn("lrk",isFirst&&"p1",isToilet&&"pL")} style={isMe&&!isFirst&&!isToilet?{color:"var(--blu)"}:{}}>{i+1}</div>
-            <div className="lnm" style={isMe?{color:"var(--blu)",fontWeight:800}:{}}>{getUserDisplay(s.ud)}{isMe&&<span style={{fontFamily:"var(--fm)",fontSize:7,color:"var(--blu)",marginLeft:4}}>YOU</span>}{!s.full&&s.rW>0?<span style={{fontFamily:"var(--fm)",fontSize:8,color:"var(--red)",marginLeft:4}}>INELIGIBLE</span>:""}</div>
-            <div className="lpt">{s.pts}</div><div className="lrc">{s.w}-{s.l}-{s.p}</div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"40px 40px 40px",padding:"11px 8px",gap:4,alignItems:"center",background:"var(--bg3)",borderLeft:"2px solid var(--bdr)"}}>
-            <div style={{textAlign:"center",fontFamily:"var(--fm)",fontSize:11,color:"var(--t3)",fontWeight:600}}>{s.graded}</div>
-            <div style={{textAlign:"center",fontFamily:"var(--fm)",fontSize:11,color:"var(--t4)"}}>{totalAvailable}</div>
-            <div style={{textAlign:"center",fontFamily:"var(--fm)",fontSize:11,fontWeight:700,color:remaining>0?"var(--navy)":"var(--t5)"}}>{remaining}</div>
-          </div>
-        </div>})}
     </div>
     <div style={{marginTop:8,fontSize:9,color:"var(--t5)",fontFamily:"var(--fm)",textAlign:"center",lineHeight:1.8}}>
       GRD = Graded (W+L+P) &middot; TOT = Total picks available &middot; LEFT = Remaining to be graded &middot; Tiebreaker: most wins
