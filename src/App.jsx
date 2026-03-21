@@ -579,12 +579,13 @@ function MakePicks({user,games,userPicks,setUserPicks,showToast}){
     </div>}
 
     {!roundFullyLocked&&rGames.length>0&&<>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:4}}>
-        <span style={{fontFamily:"var(--fm)",fontSize:12,fontWeight:700,color:done?"var(--g)":"var(--t2)"}}>{pc} / {round.requiredPicks} PICKS</span>
-        {!done&&<span style={{fontFamily:"var(--fm)",fontSize:11,color:"var(--red)",fontWeight:600}}>NOT YET FINALIZED</span>}
-        {done&&<span style={{fontFamily:"var(--fm)",fontSize:11,color:"var(--g)",fontWeight:600}}>FINALIZED</span>}
+      <div style={{position:"sticky",top:100,zIndex:10,background:done?"var(--g)":"var(--bg)",borderRadius:8,padding:"10px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 2px 8px rgba(0,0,0,0.1)",border:done?"none":"1px solid var(--bdr)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontFamily:"var(--fm)",fontSize:16,fontWeight:800,color:done?"#fff":"var(--navy)"}}>{pc}/{round.requiredPicks}</span>
+          <span style={{fontFamily:"var(--fm)",fontSize:10,fontWeight:600,color:done?"rgba(255,255,255,0.8)":"var(--t3)",letterSpacing:1,textTransform:"uppercase"}}>PICKS</span>
+        </div>
+        <span style={{fontFamily:"var(--fm)",fontSize:10,fontWeight:700,color:done?"#fff":"var(--red)",letterSpacing:1}}>{done?"FINALIZED \u2713":"NOT FINALIZED"}</span>
       </div>
-      <div className="prog"><div className={cn("prog-fill",done?"full":"part")} style={{width:`${(pc/round.requiredPicks)*100}%`}}/></div>
       {!done&&pc>0&&rGames.length>0&&<div className="not-sub-banner">You have {pc} of {round.requiredPicks} picks selected. Each spread or over/under pick counts as 1. You can pick both on the same game.</div>}
       {!done&&pc===0&&rGames.length>0&&<div className="not-sub-banner">Select {round.requiredPicks} total picks to finalize. Each spread or over/under counts as 1 pick — you can pick both on the same game.</div>}
     </>}
