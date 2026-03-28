@@ -700,6 +700,7 @@ function MakePicks({user,games,userPicks,setUserPicks,showToast}){
 
 // ─── View Picks (The Board) ──────────────────────────────────────────────────
 function ViewPicks({allPicks,users,games,allResults,currentUser}){
+  const isCom=currentUser===COMMISSIONER_USER;
   const[sr,setSr]=useState(()=>{const m=getMostRecentLockedRound(games);return m?m.id:ROUNDS[0].id});
   const rGames=(games||[]).filter(g=>g.roundId===sr).sort((a,b)=>{if(!a.tipTime)return 1;if(!b.tipTime)return -1;return new Date(a.tipTime)-new Date(b.tipTime)});
   const rawPlayers=Object.entries(users).filter(([u])=>u!==COMMISSIONER_USER);
@@ -712,23 +713,28 @@ function ViewPicks({allPicks,users,games,allResults,currentUser}){
     const a=score(unA),b=score(unB);
     return b.pts-a.pts||b.w-a.w;
   });
-  // Only show tipped games on the board
-  const tippedGames=rGames.filter(g=>isGameTipped(g));
-  const hiddenGames=rGames.filter(g=>!isGameTipped(g));
+  // Commissioner sees ALL games; players only see tipped games
+  const visibleGames=isCom?rGames:rGames.filter(g=>isGameTipped(g));
+  const hiddenGames=isCom?[]:rGames.filter(g=>!isGameTipped(g));
+  const canView=isCom?rGames.length>0:isRoundPartiallyLocked(sr,games);
 
   return (<div className="an"><div className="st">THE BOARD</div>
     <div className="fld"><label className="lbl">Round</label><select className="inp" value={sr} onChange={e=>setSr(e.target.value)}>
-      {ROUNDS.map(r=><option key={r.id} value={r.id}>{r.name} {isRoundPartiallyLocked(r.id,games)?"(viewable)":"(hidden until tip)"}</option>)}
+      {ROUNDS.map(r=>{const hasGames=(games||[]).some(g=>g.roundId===r.id);
+        return <option key={r.id} value={r.id}>{r.name} {isCom?(hasGames?"("+((games||[]).filter(g=>g.roundId===r.id).length)+" games)":"(no games)"):isRoundPartiallyLocked(r.id,games)?"(viewable)":"(hidden until tip)"}</option>})}
     </select></div>
-    {!isRoundPartiallyLocked(sr,games)?<div className="ey"><p>Picks are hidden until games tip off.<br/>First tip: {getFirstTipInRound(sr,games)?fmtTime(getFirstTipInRound(sr,games)):"TBD"}</p></div>:
-    tippedGames.length===0?<div className="ey"><p>No games have tipped yet in this round.</p></div>:
+    {isCom&&visibleGames.length>0&&<div style={{fontFamily:"var(--fm)",fontSize:9,color:"var(--t4)",marginBottom:10,padding:"6px 12px",background:"var(--bg3)",borderRadius:4,border:"1px solid var(--bdr)",textAlign:"center"}}>
+      COMMISSIONER VIEW — Showing all {visibleGames.length} games ({rGames.filter(g=>isGameTipped(g)).length} tipped, {rGames.filter(g=>!isGameTipped(g)).length} pre-tip)
+    </div>}
+    {!canView?<div className="ey"><p>Picks are hidden until games tip off.<br/>First tip: {getFirstTipInRound(sr,games)?fmtTime(getFirstTipInRound(sr,games)):"TBD"}</p></div>:
+    visibleGames.length===0?<div className="ey"><p>{isCom?"No games added for this round yet.":"No games have tipped yet in this round."}</p></div>:
     <div className="crd" style={{padding:0,overflow:"hidden"}}>
       <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-        <table style={{borderCollapse:"collapse",width:"100%",minWidth:tippedGames.length*52+130}}>
+        <table style={{borderCollapse:"collapse",width:"100%",minWidth:visibleGames.length*52+130}}>
           <thead>
             <tr style={{borderBottom:"2px solid var(--bdr)"}}>
               <th style={{position:"sticky",left:0,background:"var(--bg)",zIndex:2,padding:"8px 8px",textAlign:"left",fontFamily:"var(--fm)",fontSize:8,color:"var(--t4)",letterSpacing:1.5,fontWeight:700,borderRight:"2px solid var(--bdr)",minWidth:110,maxWidth:130}}>PLAYER</th>
-              {tippedGames.map(g=>{
+              {visibleGames.map(g=>{
                 const s1=parseInt(g.seed1)||99,s2=parseInt(g.seed2)||99;
                 return <th key={g.id} style={{padding:"6px 2px",textAlign:"center",borderRight:"1px solid var(--bdr)",width:48}}>
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1}}>
@@ -744,7 +750,7 @@ function ViewPicks({allPicks,users,games,allResults,currentUser}){
               const playerPicks=migratePicks((allPicks[un]||{})[sr]||{});
               return <tr key={un} style={{borderBottom:"1px solid var(--bdr)",background:un===currentUser?"#eef2ff":"transparent"}}>
                 <td style={{position:"sticky",left:0,background:un===currentUser?"#eef2ff":"#fff",zIndex:1,padding:"6px 8px",fontWeight:un===currentUser?800:600,fontSize:10,color:un===currentUser?"var(--blu)":"var(--t2)",borderRight:"2px solid var(--bdr)",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:130}}>{getUserDisplay(ud)}{un===currentUser?" \u2190":""}</td>
-                {tippedGames.map(g=>{
+                {visibleGames.map(g=>{
                   const ats=getAts(playerPicks,g.id);
                   const ou=getOu(playerPicks,g.id);
                   const atsResult=ats?getPickResult(allResults,sr,`${g.id}_ats`,ats):null;
