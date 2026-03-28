@@ -955,9 +955,34 @@ function Commish({games,setGames,allResults,setAllResults,allPicks,setAllPicks,u
     showToast("Game added")};
   const rm=async id=>{setSaving(true);
     const fresh=(await S.getShared("pool:games"))||[];
+    const removedGame=fresh.find(g=>g.id===id);
     const up=fresh.filter(g=>g.id!==id);
     await S.setShared("pool:games",up);
-    setGames(up);setSaving(false);showToast("Game removed")};
+    // Clean up all player picks for this game
+    if(removedGame){
+      const freshUsers=(await S.getShared("pool:users"))||{};
+      const playerNames=Object.keys(freshUsers).filter(un=>un!==COMMISSIONER_USER);
+      for(const un of playerNames){
+        const freshPicks=(await S.getShared(`picks:${un}`))||{};
+        const roundPicks=freshPicks[removedGame.roundId];
+        if(roundPicks){
+          const atsKey=`${id}_ats`,ouKey=`${id}_ou`;
+          let changed=false;
+          if(roundPicks[atsKey]){delete roundPicks[atsKey];changed=true}
+          if(roundPicks[ouKey]){delete roundPicks[ouKey];changed=true}
+          // Also check old format bare key
+          if(roundPicks[id]){delete roundPicks[id];changed=true}
+          if(changed){freshPicks[removedGame.roundId]=roundPicks;await S.setShared(`picks:${un}`,freshPicks)}
+        }
+      }
+      // Clean up results for this game
+      const freshResults=(await S.getShared("pool:results"))||{};
+      const rr=freshResults[removedGame.roundId];
+      if(rr&&rr[id]){delete rr[id];freshResults[removedGame.roundId]=rr;await S.setShared("pool:results",freshResults);setAllResults(freshResults)}
+      // Reload all picks to reflect changes
+      await loadData();
+    }
+    setGames(up);setSaving(false);showToast("Game removed — player picks cleaned up")};
   const grade=async(gid,key,val)=>{
     const freshResults=(await S.getShared("pool:results"))||{};
     const rr={...(freshResults[sr]||{})};if(!rr[gid])rr[gid]={};
@@ -1202,6 +1227,34 @@ function Commish({games,setGames,allResults,setAllResults,allPicks,setAllPicks,u
     </>}
 
     {subTab==="reset"&&<div className="crd">
+      <div className="crd-t">MAINTENANCE</div>
+      <p style={{fontSize:13,color:"var(--t3)",lineHeight:1.6,marginBottom:12}}>
+        Clean up picks that reference games that no longer exist (e.g. after removing and re-adding a game with a corrected spread).
+      </p>
+      <button className="btn btn-navy" style={{width:"100%",marginBottom:24}} onClick={async()=>{
+        setSaving(true);
+        const freshGames=(await S.getShared("pool:games"))||[];
+        const gameIds=new Set(freshGames.map(g=>g.id));
+        const freshUsers=(await S.getShared("pool:users"))||{};
+        const playerNames=Object.keys(freshUsers).filter(un=>un!==COMMISSIONER_USER);
+        let totalCleaned=0;
+        for(const un of playerNames){
+          const freshPicks=(await S.getShared(`picks:${un}`))||{};
+          let changed=false;
+          Object.entries(freshPicks).forEach(([rid,rp])=>{
+            if(!rp||typeof rp!=="object")return;
+            Object.keys(rp).forEach(key=>{
+              const gid=pickGameId(key);
+              if(!gameIds.has(gid)){delete rp[key];changed=true;totalCleaned++}
+            });
+          });
+          if(changed) await S.setShared(`picks:${un}`,freshPicks);
+        }
+        await loadData();
+        setSaving(false);
+        showToast(`Cleaned ${totalCleaned} orphaned pick${totalCleaned!==1?"s":""}`);
+      }} disabled={saving}>{saving?"CLEANING...":"CLEAN ORPHANED PICKS"}</button>
+
       <div className="crd-t" style={{color:"var(--red)"}}>DANGER ZONE</div>
       <p style={{fontSize:13,color:"var(--t3)",lineHeight:1.6,marginBottom:16}}>
         This will permanently delete all users, picks, games, results, and chat messages.
